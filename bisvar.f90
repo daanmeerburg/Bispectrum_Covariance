@@ -17,7 +17,7 @@ program bisvar
   integer :: i,j
   
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
-  real(dl) :: DB1, DB2, DB3, SumDB, DBtot
+  real(dl) :: DB(3), SumDB(3), SumTot, DBtot(3)
   
   !call fwig_temp_init(2*1000)
   
@@ -51,22 +51,25 @@ program bisvar
 
      !write(*,*) l1,Cll(1:4,j) 
   enddo
-  
+
+  !testing:
   !call deltaB1(10,12,11,17,8,Clpp(1,:),5000,DB1)
   !call deltaB2(10,12,11,17,8,Clpp(1,:),5000,DB2)
   !call deltaB3(10,12,11,17,8,Clpp(1,:),5000,DB3)
   !write(*,*) DB1, DB2, DB3
   
   
-  !for fun, let us do a loop. Diagonal first. 
-  lmax = 1000
+  !for fun, let us do a loop. Diagonal first.
+  !lower lmax for sake of time here. On Lobster, this loop takes 52 minutes. 
+  lmax = 100
   call fwig_table_init(2*lmax,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-  !$OMP PRIVATE(l1,l2,l3, l2b,l3b,min_l,max_l,DB1,DB2,DB3,DBtot), &
-  !$OMP REDUCTION(+:SumDB) 
+  !$OMP PRIVATE(l1,l2,l3, l2b,l3b,min_l,max_l,DB,DBtot), &
+  !$OMP REDUCTION(+:SumDB,Sumtot) 
   do l1 = lmin+1, lmax,2
      call fwig_thread_temp_init(2*lmax)
-     SumDB = 0.d0
+     SumDB(1:3) = 0.d0
+     Sumtot = 0.d0
      do l2 =  max(lmin,l1), lmax
         min_l = max(abs(l1-l2),l2)
         if (mod(l1+l2+min_l,2)/=0) then
@@ -79,23 +82,22 @@ program bisvar
            l2b=l2
            !for all these, because of the Wigners inside deltaB (please check):
            if  (mod(l2+l2b+l3+l3b,2)/=0) then
-              DB1 = 0.d0
-              DB2 = 0.d0
-              DB3 = 0.d0
+              DB(1:3) = 0.d0
            else    
-              call deltaB1(11,12,13,l2b,l3b,Clpp(1,:),5000,DB1)
-              call deltaB2(11,12,13,l2b,l3b,Clpp(1,:),5000,DB2)
-              call deltaB3(11,12,13,l2b,l3b,Clpp(1,:),5000,DB3)
+              call deltaB1(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(1))
+              call deltaB2(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(2))
+              call deltaB3(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(3))
            endif
            !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
            !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
-           DBtot = (-1.d0)**(l2-l1)*DB1 + &
-                (-1.d0)**(-l2-l2b)*DB2 + &
-                (-1.d0)**(-l2-l2b)*DB3*Cl(1,l2)/Cl(1,l3)
-           SumDB = SumDB + DBtot
+           DBtot(1) = (-1.d0)**(l2-l1)*DB(1)
+           DBtot(2) = (-1.d0)**(-l2-l2b)*DB(2)
+           DBtot(3) = (-1.d0)**(-l2-l2b)*DB(3)*Cl(1,l2)/Cl(1,l3) 
+           SumDB(1:3) = SumDB(1:3) + DBtot(1:3)
+           SumTot = SumTot+Sum(SumDB(1:3))
         enddo !l3
      enddo !l2
-     write(*,*) l1, SumDB
+     write(*,'(I4,4E17.8)') l1, SumTot, SumDB(1:3) 
      call fwig_temp_free();
   enddo !l1
   !$OMP END PARAllEl DO
@@ -104,15 +106,15 @@ program bisvar
   deallocate(Cl, Cll, Clpp)
 contains
   !Eq. (29) Notes
-  subroutine deltaB1(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB1)
+  subroutine deltaB1(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
     real(dl), intent(in) :: Clpp(2:lmax)
-    real(dl), intent(out) :: DB1
+    real(dl), intent(out) :: DB
     real(dl) :: stepsum
     integer :: i
     integer :: l_min, l_max
-    DB1  = 0.d0
+    DB  = 0.d0
 
     l_min = Max(abs(l2b-l2a),2)
     l_min = Max(abs(l3b-l3a),l_min)
@@ -124,26 +126,29 @@ contains
        l_min = l_min+1 
     end if
     if  (mod(l2a+l2b+l3a+l3b,2)/=0) then
-       DB1 = 0.d0
+       DB = 0.d0 !note that this is extra, since I am already doing this in do loop. Can be
+       !removed. Might speed up code. 
     else !otherwise do the sum 
        do i = l_min, l_max, 2 !L
           stepsum = fwig6jj(2* l1 , 2* l3a , 2* l2a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(i)* &
                Fc(l2b,i,l2a)*Fc(l3b,i,l3a)
-          DB1 = DB1 + stepsum
+          DB = DB + stepsum
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif 
   end subroutine deltaB1
-  !Eq. (31) Notes
-  subroutine deltaB2(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB1)
+
+  !Eq. (31) Notes; unfortunately we have to rewrite these. I dont think we can use the same code, or can we???
+  
+  subroutine deltaB2(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
     real(dl), intent(in) :: Clpp(2:lmax)
-    real(dl), intent(out) :: DB1
+    real(dl), intent(out) :: DB
     real(dl) :: stepsum
     integer :: i
     integer :: l_min, l_max
-    DB1  = 0.d0
+    DB  = 0.d0
 
     l_min = Max(abs(l2b-l3a),2)
     l_min = Max(abs(l3b-l2a),l_min)
@@ -155,28 +160,27 @@ contains
        l_min = l_min+1 
     end if
     if  (mod(l2a+l2b+l3a+l3b,2)/=0) then
-       DB1 = 0.d0
+       DB = 0.d0
     else !otherwise do the sum 
        do i = l_min, l_max, 2 !L
           stepsum = fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(i)* &
                Fc(l2b,i,l3a)*Fc(l3b,i,l2a)
-          DB1 = DB1 + stepsum
+          DB = DB + stepsum
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif 
   end subroutine deltaB2
 
   !Eq. (33) Notes
-
-  subroutine deltaB3(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB1)
+  subroutine deltaB3(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
     real(dl), intent(in) :: Clpp(2:lmax)
-    real(dl), intent(out) :: DB1
+    real(dl), intent(out) :: DB
     real(dl) :: stepsum
     integer :: i
     integer :: l_min, l_max
-    DB1  = 0.d0
+    DB  = 0.d0
 
     l_min = Max(abs(l3b-l2a),2)
     l_min = Max(abs(l3a-l2b),l_min)
@@ -188,12 +192,12 @@ contains
        l_min = l_min+1 
     end if
     if  (mod(l2a+l2b+l3a+l3b,2)/=0) then
-       DB1 = 0.d0
+       DB = 0.d0
     else !otherwise do the sum 
        do i = l_min, l_max, 2 !L
           stepsum = fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(i)* &
                Fc(l3b,i,l2a)*Fc(l3a,i,l2b)
-          DB1 = DB1 + stepsum
+          DB = DB + stepsum
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif 
