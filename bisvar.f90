@@ -17,7 +17,7 @@ program bisvar
   integer :: i,j
   
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
-  real(dl) :: DB(3), SumDB(3), SumTot, DBtot(3)
+  real(dl) :: DB(4), SumDB(4), SumTot, DBtot(4)
   
   !call fwig_temp_init(2*1000)
   
@@ -53,30 +53,40 @@ program bisvar
   enddo
 
   !testing:
-  !call deltaB1(10,12,11,17,8,Clpp(1,:),5000,DB1)
-  !call deltaB2(10,12,11,17,8,Clpp(1,:),5000,DB2)
-  !call deltaB3(10,12,11,17,8,Clpp(1,:),5000,DB3)
-  !write(*,*) DB1, DB2, DB3
-  
+  call fwig_table_init(2*lmax,9)
+  call fwig_temp_init(2*lmax)
+  l1 = 11
+  call deltaB1(l1,12,11,17,8,Clpp(1,:),5000,DB(1))
+  call deltaB2(l1,12,11,17,8,Clpp(1,:),5000,DB(2))
+  call deltaB3(l1,12,11,17,8,Clpp(1,:),5000,DB(3))
+  call deltaB4(l1,12,11,17,8,Clpp(1,:),5000,DB(4))
+  write(*,*) DB(1:4)
+  call fwig_temp_free();
+  call fwig_table_free();
+  !stop
   
   !for fun, let us do a loop. Diagonal first.
-  !lower lmax for sake of time here. On Lobster, this loop takes 52 minutes. 
-  lmax = 100
-  call fwig_table_init(2*lmax,9)
+  !lower lmax for sake of time here. On Lobster, this loop takes 52 minutes.
+
+  !note also that I did not seperatly apply the filter that would introduce another Wigner3j
+  !(is this correct?). This would lower the number of sample points. 
+  lmax = 2000
+  call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3, l2b,l3b,min_l,max_l,DB,DBtot), &
   !$OMP REDUCTION(+:SumDB,Sumtot) 
-  do l1 = lmin+1, lmax,2
+  do l1 = lmin, lmax
      call fwig_thread_temp_init(2*lmax)
-     SumDB(1:3) = 0.d0
+     SumDB(1:4) = 0.d0
      Sumtot = 0.d0
      do l2 =  max(lmin,l1), lmax
         min_l = max(abs(l1-l2),l2)
-        if (mod(l1+l2+min_l,2)/=0) then
-           min_l = min_l+1 !l3 should only lead to parity even numbers
-        end if
+        !below only relevant if there would be another Wigner3J. 
+        !if (mod(l1+l2+min_l,2)/=0) then
+        !   min_l = min_l+1 !l3 should only lead to parity even numbers
+        !end if
         max_l = min(lmax,l1+l2)
-        do l3=min_l,max_l, 2 !sum has to be even
+        do l3=min_l,max_l !,2 sum has to be even
            !diagonal 
            l3b=l3
            l2b=l2
@@ -87,17 +97,20 @@ program bisvar
               call deltaB1(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(1))
               call deltaB2(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(2))
               call deltaB3(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(3))
+              call deltaB4(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(4))
            endif
            !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
            !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
            DBtot(1) = (-1.d0)**(l2-l1)*DB(1)
            DBtot(2) = (-1.d0)**(-l2-l2b)*DB(2)
-           DBtot(3) = (-1.d0)**(-l2-l2b)*DB(3)*Cl(1,l2)/Cl(1,l3) 
-           SumDB(1:3) = SumDB(1:3) + DBtot(1:3)
-           SumTot = SumTot+Sum(DBtot)
+           DBtot(3) = (-1.d0)**(-l2-l2b)*DB(3)*Cl(1,l2)/Cl(1,l3)
+           DBtot(4) = DB(4)*Cl(1,l2)/Cl(1,l3)
+           SumDB(1:4) = SumDB(1:4) + DBtot(1:4)
+           SumTot = SumTot+ DBtot(1)+DBtot(2)+DBtot(3)+DBtot(4) !Sum(DBtot)
+           !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
         enddo !l3
      enddo !l2
-     write(*,'(I4,4E17.8)') l1, SumTot, SumDB(1:3) 
+     write(*,'(I4,5E17.8)') l1, SumTot, SumDB(1:4) 
      call fwig_temp_free();
   enddo !l1
   !$OMP END PARAllEl DO
@@ -202,6 +215,20 @@ contains
        enddo
     endif 
   end subroutine deltaB3
+
+  !Eq. (33) Notes
+  subroutine deltaB4(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB)
+    integer, intent(in) :: l1,l2a,l3a,l2b,l3b
+    integer, intent(in) :: lmax
+    real(dl), intent(in) :: Clpp(2:lmax)
+    real(dl), intent(out) :: DB
+    if  (mod(l1+l2a+l3a,2)/=0 .or. mod(l1+l2b+l3b,2)/=0) then
+       DB = 0.d0
+    else
+       DB = Clpp(l1)*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)
+    endif
+    
+  end subroutine deltaB4
   
   real(dl) function Fc(l1,l2,l3)
     integer :: l1, l2, l3
