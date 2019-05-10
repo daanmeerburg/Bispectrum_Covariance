@@ -17,7 +17,7 @@ program bisvar
   integer :: i,j
   
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
-  real(dl) :: DB(4), SumDB(4), SumTot, DBtot(4)
+  real(dl) :: DB(4,8), SumDB(4,8), SumTot, DBtot(4,8)
   
   !call fwig_temp_init(2*1000)
   
@@ -53,31 +53,31 @@ program bisvar
   enddo
 
   !testing:
-  call fwig_table_init(2*lmax,9)
-  call fwig_temp_init(2*lmax)
-  l1 = 11
-  call deltaB1(l1,12,11,17,8,Clpp(1,:),5000,DB(1))
-  call deltaB2(l1,12,11,17,8,Clpp(1,:),5000,DB(2))
-  call deltaB3(l1,12,11,17,8,Clpp(1,:),5000,DB(3))
-  call deltaB4(l1,12,11,17,8,Clpp(1,:),5000,DB(4))
-  write(*,*) DB(1:4)
-  call fwig_temp_free();
-  call fwig_table_free();
-  !stop
+!!$  call fwig_table_init(2*lmax,9)
+!!$  call fwig_temp_init(2*lmax)
+!!$  l1 = 11
+!!$  call deltaB1(l1,12,11,17,8,Clpp(1,:),5000,DB(1))
+!!$  call deltaB2(l1,12,11,17,8,Clpp(1,:),5000,DB(2))
+!!$  call deltaB3(l1,12,11,17,8,Clpp(1,:),5000,DB(3))
+!!$  call deltaB4(l1,12,11,17,8,Clpp(1,:),5000,DB(4))
+!!$  write(*,*) DB(1:4)
+!!$  call fwig_temp_free();
+!!$  call fwig_table_free();
+!!$  stop
   
   !for fun, let us do a loop. Diagonal first.
   !lower lmax for sake of time here. On Lobster, this loop takes 52 minutes.
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 2000
+  lmax = 500
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3, l2b,l3b,min_l,max_l,DB,DBtot), &
   !$OMP REDUCTION(+:SumDB,Sumtot) 
   do l1 = lmin, lmax
      call fwig_thread_temp_init(2*lmax)
-     SumDB(1:4) = 0.d0
+     SumDB(1:4,1:8) = 0.d0
      Sumtot = 0.d0
      do l2 =  max(lmin,l1), lmax
         min_l = max(abs(l1-l2),l2)
@@ -90,27 +90,72 @@ program bisvar
            !diagonal 
            l3b=l3
            l2b=l2
+           l1b=l1
            !for all these, because of the Wigners inside deltaB (please check):
-           if  (mod(l2+l2b+l3+l3b,2)/=0) then
-              DB(1:3) = 0.d0
-           else    
-              call deltaB1(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(1))
-              call deltaB2(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(2))
-              call deltaB3(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(3))
-              call deltaB4(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(4))
-           endif
+           !if  (mod(l2+l2b+l3+l3b,2)/=0) then
+           !   DB(1:3,1) = 0.d0
+           !else    
+              call deltaB1(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(1,1))
+              call deltaB2(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(2,1))
+              call deltaB3(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(3,1))
+              call deltaB4(11,12,13,l2b,l3b,Clpp(1,:),5000,DB(4,1))
+              !question: what are the permutation allowed??
+              !For exmaple, are these the ones:
+              call deltaB4(12,11,13,l1b,l3b,Clpp(1,:),5000,DB(4,2))
+              call deltaB4(11,13,12,l3b,l2b,Clpp(1,:),5000,DB(4,3))
+              call deltaB4(12,13,11,l3b,l1b,Clpp(1,:),5000,DB(4,4))
+              call deltaB4(13,12,11,l2b,l1b,Clpp(1,:),5000,DB(4,5))
+              call deltaB4(13,11,12,l1b,l2b,Clpp(1,:),5000,DB(4,6))
+              !if that is the case, then the others are identical:
+              call deltaB1(12,11,13,l1b,l3b,Clpp(1,:),5000,DB(1,2))
+              call deltaB1(11,13,12,l3b,l2b,Clpp(1,:),5000,DB(1,3))
+              call deltaB1(12,13,11,l3b,l1b,Clpp(1,:),5000,DB(1,4))
+              call deltaB1(13,12,11,l2b,l1b,Clpp(1,:),5000,DB(1,5))
+              call deltaB1(13,11,12,l1b,l2b,Clpp(1,:),5000,DB(1,6))
+              call deltaB2(12,11,13,l1b,l3b,Clpp(1,:),5000,DB(2,2))
+              call deltaB2(11,13,12,l3b,l2b,Clpp(1,:),5000,DB(2,3))
+              call deltaB2(12,13,11,l3b,l1b,Clpp(1,:),5000,DB(2,4))
+              call deltaB2(13,12,11,l2b,l1b,Clpp(1,:),5000,DB(2,5))
+              call deltaB2(13,11,12,l1b,l2b,Clpp(1,:),5000,DB(2,6))
+              call deltaB3(12,11,13,l1b,l3b,Clpp(1,:),5000,DB(3,2))
+              call deltaB3(11,13,12,l3b,l2b,Clpp(1,:),5000,DB(3,3))
+              call deltaB3(12,13,11,l3b,l1b,Clpp(1,:),5000,DB(3,4))
+              call deltaB3(13,12,11,l2b,l1b,Clpp(1,:),5000,DB(3,5))
+              call deltaB3(13,11,12,l1b,l2b,Clpp(1,:),5000,DB(3,6))  
+           !endif
            !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
            !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
-           DBtot(1) = (-1.d0)**(l2-l1)*DB(1)
-           DBtot(2) = (-1.d0)**(-l2-l2b)*DB(2)
-           DBtot(3) = (-1.d0)**(-l2-l2b)*DB(3)*Cl(1,l2)/Cl(1,l3)
-           DBtot(4) = DB(4)*Cl(1,l2)/Cl(1,l3)
-           SumDB(1:4) = SumDB(1:4) + DBtot(1:4)
-           SumTot = SumTot+ DBtot(1)+DBtot(2)+DBtot(3)+DBtot(4) !Sum(DBtot)
+              DBtot(1,1) = (-1.d0)**(l2-l1)*DB(1,1)
+              DBtot(1,2) = (-1.d0)**(l1-l2)*DB(1,2)
+              DBtot(1,3) = (-1.d0)**(l3-l1)*DB(1,3)
+              DBtot(1,4) = (-1.d0)**(l3-l2)*DB(1,4)
+              DBtot(1,5) = (-1.d0)**(l2-l3)*DB(1,5)
+              DBtot(1,6) = (-1.d0)**(l1-l3)*DB(1,6)
+              DBtot(2,1) = (-1.d0)**(-l2-l2b)*DB(2,1)
+              DBtot(2,2) = (-1.d0)**(-l1-l1b)*DB(2,1)
+              DBtot(2,3) = (-1.d0)**(-l3-l3b)*DB(2,1)
+              DBtot(2,4) = (-1.d0)**(-l3-l3b)*DB(2,1)
+              DBtot(2,5) = (-1.d0)**(-l2-l2b)*DB(2,1)
+              DBtot(2,6) = (-1.d0)**(-l1-l1b)*DB(2,1)
+              
+              DBtot(3,1) = (-1.d0)**(-l2-l2b)*DB(3,1)*Cl(1,l2b)/Cl(1,l3)
+              DBtot(3,2) = (-1.d0)**(-l1-l1b)*DB(3,2)*Cl(1,l1b)/Cl(1,l3)
+              DBtot(3,3) = (-1.d0)**(-l3-l3b)*DB(3,3)*Cl(1,l3b)/Cl(1,l2)
+              DBtot(3,4) = (-1.d0)**(-l3-l3b)*DB(3,4)*Cl(1,l3b)/Cl(1,l1)
+              DBtot(3,5) = (-1.d0)**(-l2-l2b)*DB(3,5)*Cl(1,l1b)/Cl(1,l2)
+              DBtot(3,6) = (-1.d0)**(-l1-l1b)*DB(3,6)*Cl(1,l2b)/Cl(1,l1)
+              DBtot(4,1) = DB(4,1)*Cl(1,l2b)/Cl(1,l3)
+              DBtot(4,2) = DB(4,2)*Cl(1,l1b)/Cl(1,l3)
+              DBtot(4,3) = DB(4,3)*Cl(1,l3b)/Cl(1,l2)
+              DBtot(4,4) = DB(4,4)*Cl(1,l3b)/Cl(1,l1)
+              DBtot(4,5) = DB(4,5)*Cl(1,l1b)/Cl(1,l2)
+              DBtot(4,6) = DB(4,6)*Cl(1,l2b)/Cl(1,l1)
+              SumDB(1:4,1:6) = SumDB(1:4,1:6) + DBtot(1:4,1:6)
+              SumTot = SumTot+ sum(DBtot) !Sum(DBtot)
            !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
         enddo !l3
      enddo !l2
-     write(*,'(I4,5E17.8)') l1, SumTot, SumDB(1:4) 
+     write(*,'(I4,10E17.8)') l1, SumTot, SumDB(1:3,1),SumDB(4,1:6)  
      call fwig_temp_free();
   enddo !l1
   !$OMP END PARAllEl DO
