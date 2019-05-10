@@ -94,7 +94,7 @@ program bisvar
            DBtot(2) = (-1.d0)**(-l2-l2b)*DB(2)
            DBtot(3) = (-1.d0)**(-l2-l2b)*DB(3)*Cl(1,l2)/Cl(1,l3) 
            SumDB(1:3) = SumDB(1:3) + DBtot(1:3)
-           SumTot = SumTot+Sum(SumDB(1:3))
+           SumTot = SumTot+Sum(DBtot)
         enddo !l3
      enddo !l2
      write(*,'(I4,4E17.8)') l1, SumTot, SumDB(1:3) 
