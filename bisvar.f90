@@ -261,7 +261,7 @@ contains
     endif 
   end subroutine deltaB3
 
-  !Eq. (33) Notes
+  !Eq. (35) Notes
   subroutine deltaB4(l1,l2a,l3a,l2b,l3b,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
