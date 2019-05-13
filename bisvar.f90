@@ -70,7 +70,7 @@ program bisvar
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 500
+  lmax = 100
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3, l2b,l3b,min_l,max_l,DB,DBtot), &
@@ -125,12 +125,12 @@ program bisvar
            !endif
            !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
            !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
-              DBtot(1,1) = (-1.d0)**(l2-l1)*DB(1,1)
-              DBtot(1,2) = (-1.d0)**(l1-l2)*DB(1,2)
-              DBtot(1,3) = (-1.d0)**(l3-l1)*DB(1,3)
-              DBtot(1,4) = (-1.d0)**(l3-l2)*DB(1,4)
-              DBtot(1,5) = (-1.d0)**(l2-l3)*DB(1,5)
-              DBtot(1,6) = (-1.d0)**(l1-l3)*DB(1,6)
+              DBtot(1,1) = (-1.d0)**(l3+l2b)*DB(1,1)
+              DBtot(1,2) = (-1.d0)**(l3-l1b)*DB(1,2)
+              DBtot(1,3) = (-1.d0)**(l2-l3b)*DB(1,3)
+              DBtot(1,4) = (-1.d0)**(l1-l3b)*DB(1,4)
+              DBtot(1,5) = (-1.d0)**(l1-l2b)*DB(1,5)
+              DBtot(1,6) = (-1.d0)**(l2-l1b)*DB(1,6)
               DBtot(2,1) = (-1.d0)**(-l2-l2b)*DB(2,1)
               DBtot(2,2) = (-1.d0)**(-l1-l1b)*DB(2,1)
               DBtot(2,3) = (-1.d0)**(-l3-l3b)*DB(2,1)
@@ -155,7 +155,7 @@ program bisvar
            !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
         enddo !l3
      enddo !l2
-     write(*,'(I4,10E17.8)') l1, SumTot, SumDB(1:3,1),SumDB(4,1:6)  
+     write(*,'(I4,25E17.8)') l1, SumTot, SumDB(1:4,1:6)
      call fwig_temp_free();
   enddo !l1
   !$OMP END PARAllEl DO
@@ -270,7 +270,7 @@ contains
     if  (mod(l1+l2a+l3a,2)/=0 .or. mod(l1+l2b+l3b,2)/=0) then
        DB = 0.d0
     else
-       DB = Clpp(l1)*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)
+       DB = Clpp(l1)*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)/(2*l1+1)
     endif
     
   end subroutine deltaB4
