@@ -441,7 +441,7 @@ contains
     if  (mod(l1+l2a+l3a,2)/=0 .or. mod(l1+l2b+l3b,2)/=0) then
        DB = 0.d0
     else
-       DB = Clpp(l1)*FcM(l3a,l1,l2a)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*Cll(l1)*Cll(l2a)*Cll(l2b)
+       DB = Clpp(l1)*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)/(2*l1+1.d0)*Cll(l1)*Cll(l2a)*Cll(l2b)
     endif
     
   end subroutine deltaB4
