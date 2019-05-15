@@ -72,13 +72,14 @@ program bisvar
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 500
+  lmax = 200
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,DB,a3j,i,j,k,l,m,n, el, elb), &
   !$OMP REDUCTION(+:SumDB,Sumtot) 
   do l1 = lmin, lmax
      call fwig_thread_temp_init(2*lmax)
+     DB = 0.d0
      SumDB(1:4,1:36) = 0.d0
      Sumtot = 0.d0
      do l2 =  max(lmin,l1), lmax
@@ -258,15 +259,28 @@ program bisvar
                           !write(*,*) i,j,k,l,m, n
                           !call deltaB1(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(1,n))
                           !call deltaB2(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(2,n))
-                          !call deltaB3(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(3,n))
-                          call deltaB4(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(4,n))
+                          call deltaB3(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(3,n))
+                          !call deltaB4(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(4,n))
                           n = n + 1
                        enddo
                     enddo
                  enddo
               enddo
            enddo
-           
+           !diagonal only
+!!$           n = 1
+!!$           do i = 1, 3 !l1,l2,l3
+!!$              do j = i + 1, i + 2
+!!$                 do k = j + 1, j + 1
+!!$                          !write(*,*) i,j,k,l,m, n
+!!$                          !call deltaB1(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(1,n))
+!!$                          !call deltaB2(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(2,n))
+!!$                          !call deltaB3(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(3,n))
+!!$                          call deltaB4(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(4,n))
+!!$                          n = n + 1
+!!$                 enddo
+!!$              enddo
+!!$           enddo           
            !call deltaB4(11,12,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,1))
            !call deltaB4p(11,12,13,l2b,l3b,a3j,Cll(1,:),Clpp(1,:),5000,DB(4,2))
 !!$           call deltaB4(11,12,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,1))
@@ -318,7 +332,7 @@ program bisvar
            !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
 
            SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
-           SumTot = SumTot+ sum(DB(4,1:36))/Cll(1,l1)/Cll(1,l2)/Cll(1,l3) !Sum(DBtot)
+           SumTot = SumTot+ sum(DB)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3) !Sum(DBtot)
            !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
         enddo !l3
      enddo !l2
