@@ -77,7 +77,7 @@ program bisvar
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,DB,a3j,i,j,k,l,m,n, el, elb), &
   !$OMP REDUCTION(+:SumDB,Sumtot) 
-  do l1 = lmin, lmax
+  do l1 = 400, lmax
      call fwig_thread_temp_init(2*lmax)
      DB = 0.d0
      SumDB(1:4,1:36) = 0.d0
@@ -260,7 +260,7 @@ program bisvar
                           !call deltaB1(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(1,n))
                           !call deltaB2(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(2,n))
                           !call deltaB3(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(3,n))
-                          call deltaB4(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(4,n))
+                          call deltaB4(el(i),el(j),el(k),elb(l),elb(m),Cll(1,el(i)),Cll(1,el(j)),Cll(1,elb(l)),Clpp(1,el(i)),5000,DB(4,n))
                           n = n + 1
                        enddo
                     enddo
@@ -447,19 +447,20 @@ contains
   end subroutine deltaB3
 
   !Eq. (35) Notes
-  subroutine deltaB4(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
+  subroutine deltaB4(l1,l2a,l3a,l2b,l3b,Cll1,Cll2,Cll3,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
-    real(dl), intent(in) :: Clpp(2:lmax),Cll(2:lmax)
+    real(dl), intent(in) :: Clpp,Cll1,Cll2,Cll3
     real(dl), intent(out) :: DB
     if  (mod(l1+l2a+l3a,2)/=0 .or. mod(l1+l2b+l3b,2)/=0) then
        DB = 0.d0
     else
-       DB = Clpp(l1)*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)/(2*l1+1.d0)*Cll(l1)*Cll(l2a)*Cll(l2b)
+       DB = Clpp*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)/(2*l1+1.d0)*Cll1*Cll2*Cll3
+       !*Cll(l1)*Cll(l2a)*Cll(l2b)
     endif
     
   end subroutine deltaB4
-
+  
   !Eq. (35) Notes
   subroutine deltaB4p(l1,l2a,l3a,l2b,l3b,a3j,Cll,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
@@ -473,11 +474,13 @@ contains
     endif
     
   end subroutine deltaB4p
-  
+
+  !subroutine 
   real(dl) function Fc(l1,l2,l3)
     integer :: l1, l2, l3
     Fc = 1.d0/2.d0*(l2*(l2+1.0)+l3*(l3+1.0)-l1*(l1+1.0))* &
-         sqrt((2*l1+1.0)*(2*l2+1.0)*(2*l3+1.0))/sqrt(4.0*pi)*Wig0(l1,l3,l2)
+         sqrt((2*l1+1.0)*(2*l2+1.0)*(2*l3+1.0))/sqrt(4.0*pi)*LargeArg3Js(l1,l2,l3)
+    !*Wig0(l1,l3,l2)
   end function Fc
 
   real(dl) function FcM(l1,l2,l3)
@@ -491,6 +494,20 @@ contains
     Wig0 = fwig3jj(2* l1 , 2* l2 , 2* l3 , 2* 0, 2* 0 , 2* 0)
     
   end function Wig0
+
+  real(dl) function LargeArg3Js(l1,l2,l3)
+    integer, intent (in) :: l1, l2, l3
+    integer :: lt
+    lt = l1+l2+l3
+    !there are also infinities when and of the l is lt/2
+    !these are not infinities, but do not know how else to deal with them
+    if(l1 .eq. lt/2 .or. l2 .eq. lt/2 .or. l3 .eq. lt/2) lt = lt - 1
+    LargeArg3Js = sqrt(2.d0/pi)*(-1.d0)**(lt/2.d0)/ &
+         (lt*(lt-2.d0*l1)*(lt-2.d0*l2)*(lt-2.d0*l3))**(1./4.)
+    !get rid of NAN's
+    if(LargeArg3Js .ne. LargeArg3Js) LargeArg3Js = 0.d0
+
+  end function LargeArg3Js
   
 
     subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
