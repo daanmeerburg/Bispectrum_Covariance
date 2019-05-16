@@ -5,36 +5,54 @@ program bisvar
   implicit none
   integer, parameter :: dl= KIND(1.d0)
   real(dl), parameter :: pi = 3.14159265359
-  
+
   character(80) :: Folder1, Folder2, Folder3
   character(80) :: Clfile, Cllfile
-  
-  real(dl), allocatable :: Cl(:,:), Cll(:,:), Clpp(:,:)
 
+  real(dl), allocatable :: Cl(:,:), Cll(:,:)
+  real(dl), pointer :: pClpp(:,:)
   !integer :: l1, l2, l3
-  integer :: lmax, lmin, l1, l2, l3, l1b, l2b, l3b, el(5), elb(5)
-  integer :: min_l, max_l
+  integer :: lmax, lmin, l1, l2, l3, l1b, l2b, l3b, el(3,6), elb(3,6)
+  integer :: min_l, max_l, Lm
   integer :: i,j, k, l, m, n 
 
   real(dl)  :: a3j(0:20000)
-  
+
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
   real(dl) :: DB(4,36), SumDB(4,36), SumTot, DBtot(4,36)
-  
+
   !call fwig_temp_init(2*1000)
-  
+
   lmax = 5000
   lmin = 2
   allocate(Cl(4,2:lmax))
   allocate(Cll(4,2:lmax))
-  allocate(Clpp(3,2:lmax))
+  allocate(pClpp(3,2:lmax))
 
   Folder1 = 'SOspectra/'
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
   Cllfile = trim(Folder1)//trim('SOspectra_lensedCls.dat')
-  
+
   open(unit=17,file = Clfile, status='old')
   open(unit=18,file = Cllfile, status='old')
+!!$  do j = 1, lmax
+!!$     !#    L    TT             EE             BB             TE 
+!!$     !#    L    TT             EE             BB             TE             PP             TP             EP
+!!$     if (j .eq. 1) then
+!!$        read(17,*)
+!!$        read(18,*)
+!!$        cycle
+!!$     endif
+!!$     
+!!$     read(17,*) l1, Cl(1:4,j),Clpp(1:3,j)
+!!$     read(18,*) l1, Cll(1:4,j)
+!!$     Cll(1:4,j) = 2.*pi*Cll(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
+!!$     Cl(1:4,j) = 2.*pi*Cl(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
+!!$     Clpp(1,j) = 2.*pi*Clpp(1,j)/(real(l1,dl)*(real(l1,dl)+1.))**2
+!!$     Clpp(2:3,j) = 2.*pi*Clpp(2:3,j)/(real(l1,dl)*(real(l1,dl)+1.))**(3.d0/2.d0)/CMB2COBEnorm**(1./2)
+!!$
+!!$     !write(*,*) l1,Cll(1:4,j) 
+!!$  enddo
   do j = 1, lmax
      !#    L    TT             EE             BB             TE 
      !#    L    TT             EE             BB             TE             PP             TP             EP
@@ -43,16 +61,18 @@ program bisvar
         read(18,*)
         cycle
      endif
-     
-     read(17,*) l1, Cl(1:4,j),Clpp(1:3,j)
+
+     read(17,*) l1, Cl(1:4,j),pClpp(1:3,j)
      read(18,*) l1, Cll(1:4,j)
      Cll(1:4,j) = 2.*pi*Cll(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
      Cl(1:4,j) = 2.*pi*Cl(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
-     Clpp(1,j) = 2.*pi*Clpp(1,j)/(real(l1,dl)*(real(l1,dl)+1.))**2
-     Clpp(2:3,j) = 2.*pi*Clpp(2:3,j)/(real(l1,dl)*(real(l1,dl)+1.))**(3.d0/2.d0)/CMB2COBEnorm**(1./2)
+     pClpp(1,j) = 2.*pi*pClpp(1,j)/(real(l1,dl)*(real(l1,dl)+1.))**2
+     pClpp(2:3,j) = 2.*pi*pClpp(2:3,j)/(real(l1,dl)*(real(l1,dl)+1.))**(3.d0/2.d0)/CMB2COBEnorm**(1./2)
 
      !write(*,*) l1,Cll(1:4,j) 
   enddo
+  close(17)
+  close(18)
 
   !testing:
 !!$  call fwig_table_init(2*lmax,9)
@@ -66,284 +86,73 @@ program bisvar
 !!$  call fwig_temp_free();
 !!$  call fwig_table_free();
 !!$  stop
-  
+
   !for fun, let us do a loop. Diagonal first.
   !lower lmax for sake of time here. On Lobster, this loop takes 52 minutes.
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
   lmax = 1000
+  lmin = 400
+  open(unit=12,file='test4.txt', status = 'replace')
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-  !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,DB,a3j,i,j,k,l,m,n, el, elb), &
-  !$OMP REDUCTION(+:SumDB,Sumtot) 
-  do l1 = 400, lmax
+  !$OMP PRIVATE(Lm,lmax,l1,l2,l3,l1b,l2b,l3b,min_l,max_l,DB,a3j,i,j,k,l,m,n, el, elb), &
+  !$OMP REDUCTION(+:SumDB,Sumtot)
+  do Lm = 500,3000,20
+     lmax = Lm
      call fwig_thread_temp_init(2*lmax)
      DB = 0.d0
      SumDB(1:4,1:36) = 0.d0
      Sumtot = 0.d0
-     do l2 =  max(lmin,l1), lmax
-        min_l = max(abs(l1-l2),l2)
-        !below only relevant if there would be another Wigner3J. 
-        if (mod(l1+l2+min_l,2)/=0) then
-           min_l = min_l+1 !l3 should only lead to parity even numbers
-        end if
-        max_l = min(lmax,l1+l2)
-        !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
-        do l3=min_l,max_l, 2 !sum has to be even
-           !diagonal 
-           l3b=l3
-           l2b=l2
-           l1b=l1
-           !for all these, because of the Wigners inside deltaB (please check):
-           !if  (mod(l2+l2b+l3+l3b,2)/=0) then
-           !   DB(1:3,1) = 0.d0
-           !else
-           !Delta Cov [1]
-!!$           call deltaB1(11,12,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,1))
-!!$           call deltaB1(11,13,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,2))
-!!$           call deltaB1(11,12,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,3))
-!!$           call deltaB1(11,13,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,4))
-!!$
-!!$           call deltaB1(11,12,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,5))
-!!$           call deltaB1(11,13,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,6))
-!!$           call deltaB1(11,12,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,7))
-!!$           call deltaB1(11,13,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,8))
-!!$
-!!$           call deltaB1(11,12,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,9))
-!!$           call deltaB1(11,13,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,10))
-!!$           call deltaB1(11,12,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,11))
-!!$           call deltaB1(11,13,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,12))
-!!$
-!!$           call deltaB1(12,11,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,13))
-!!$           call deltaB1(12,13,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,14))
-!!$           call deltaB1(12,11,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,15))
-!!$           call deltaB1(12,13,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,16))
-!!$
-!!$           call deltaB1(12,11,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,17))
-!!$           call deltaB1(12,13,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,18))
-!!$           call deltaB1(12,11,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,19))
-!!$           call deltaB1(12,13,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,20))
-!!$
-!!$           call deltaB1(12,11,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,21))
-!!$           call deltaB1(12,13,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,22))
-!!$           call deltaB1(12,11,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,23))
-!!$           call deltaB1(12,13,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,24))
-!!$
-!!$           call deltaB1(13,11,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,25))
-!!$           call deltaB1(13,12,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,26))
-!!$           call deltaB1(13,11,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,27))
-!!$           call deltaB1(13,12,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,28))
-!!$
-!!$           call deltaB1(13,11,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,29))
-!!$           call deltaB1(13,12,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,30))
-!!$           call deltaB1(13,11,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,31))
-!!$           call deltaB1(13,12,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(1,32))
-!!$
-!!$           call deltaB1(13,11,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,33))
-!!$           call deltaB1(13,12,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,34))
-!!$           call deltaB1(13,11,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(1,35))
-!!$           call deltaB1(13,12,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(1,36))
-!!$
-!!$           !Delta Cov [2]
-!!$           call deltaB2(11,12,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,1))
-!!$           call deltaB2(11,13,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,2))
-!!$           call deltaB2(11,12,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,3))
-!!$           call deltaB2(11,13,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,4))
-!!$
-!!$           call deltaB2(11,12,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,5))
-!!$           call deltaB2(11,13,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,6))
-!!$           call deltaB2(11,12,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,7))
-!!$           call deltaB2(11,13,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,8))
-!!$
-!!$           call deltaB2(11,12,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,9))
-!!$           call deltaB2(11,13,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,10))
-!!$           call deltaB2(11,12,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,11))
-!!$           call deltaB2(11,13,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,12))
-!!$
-!!$           call deltaB2(12,11,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,13))
-!!$           call deltaB2(12,13,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,14))
-!!$           call deltaB2(12,11,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,15))
-!!$           call deltaB2(12,13,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,16))
-!!$
-!!$           call deltaB2(12,11,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,17))
-!!$           call deltaB2(12,13,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,18))
-!!$           call deltaB2(12,11,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,19))
-!!$           call deltaB2(12,13,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,20))
-!!$
-!!$           call deltaB2(12,11,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,21))
-!!$           call deltaB2(12,13,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,22))
-!!$           call deltaB2(12,11,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,23))
-!!$           call deltaB2(12,13,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,24))
-!!$
-!!$           call deltaB2(13,11,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,25))
-!!$           call deltaB2(13,12,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,26))
-!!$           call deltaB2(13,11,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,27))
-!!$           call deltaB2(13,12,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,28))
-!!$
-!!$           call deltaB2(13,11,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,29))
-!!$           call deltaB2(13,12,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,30))
-!!$           call deltaB2(13,11,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,31))
-!!$           call deltaB2(13,12,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(2,32))
-!!$
-!!$           call deltaB2(13,11,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,33))
-!!$           call deltaB2(13,12,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,34))
-!!$           call deltaB2(13,11,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(2,35))
-!!$           call deltaB2(13,12,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(2,36))
-!!$
-!!$           !Delta Cov [3]
-!!$           call deltaB3(11,12,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,1))
-!!$           call deltaB3(11,13,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,2))
-!!$           call deltaB3(11,12,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,3))
-!!$           call deltaB3(11,13,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,4))
-!!$
-!!$           call deltaB3(11,12,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,5))
-!!$           call deltaB3(11,13,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,6))
-!!$           call deltaB3(11,12,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,7))
-!!$           call deltaB3(11,13,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,8))
-!!$
-!!$           call deltaB3(11,12,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,9))
-!!$           call deltaB3(11,13,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,10))
-!!$           call deltaB3(11,12,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,11))
-!!$           call deltaB3(11,13,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,12))
-!!$
-!!$           call deltaB3(12,11,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,13))
-!!$           call deltaB3(12,13,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,14))
-!!$           call deltaB3(12,11,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,15))
-!!$           call deltaB3(12,13,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,16))
-!!$
-!!$           call deltaB3(12,11,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,17))
-!!$           call deltaB3(12,13,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,18))
-!!$           call deltaB3(12,11,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,19))
-!!$           call deltaB3(12,13,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,20))
-!!$
-!!$           call deltaB3(12,11,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,21))
-!!$           call deltaB3(12,13,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,22))
-!!$           call deltaB3(12,11,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,23))
-!!$           call deltaB3(12,13,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,24))
-!!$
-!!$           call deltaB3(13,11,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,25))
-!!$           call deltaB3(13,12,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,26))
-!!$           call deltaB3(13,11,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,27))
-!!$           call deltaB3(13,12,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,28))
-!!$
-!!$           call deltaB3(13,11,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,29))
-!!$           call deltaB3(13,12,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,30))
-!!$           call deltaB3(13,11,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,31))
-!!$           call deltaB3(13,12,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(3,32))
-!!$
-!!$           call deltaB3(13,11,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,33))
-!!$           call deltaB3(13,12,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,34))
-!!$           call deltaB3(13,11,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(3,35))
-!!$           call deltaB3(13,12,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(3,36))
+     do l1 = lmin, lmax
 
-
-           !Delta Cov [4]
-           el(1) = l1
-           el(2) = l2
-           el(3) = l3
-           el(4) = l1
-           el(5) = l2
-           elb(1) = l1b
-           elb(2) = l2b
-           elb(3) = l3b
-           elb(4) = l1b
-           elb(5) = l2b
-           !permutations (total of 36 because only 5 ell are permutable)
-           n = 1
-           do i = 1, 3 !l1,l2,l3
-              do j = i + 1, i + 2
-                 do k = j + 1, j + 1
-                    do l = 1, 3
-                       do m = l + 1, l + 2
-                          !write(*,*) i,j,k,l,m, n
-                          !call deltaB1(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(1,n))
-                          !call deltaB2(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(2,n))
-                          !call deltaB3(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(3,n))
-                          call deltaB4(el(i),el(j),el(k),elb(l),elb(m),Cll(1,el(i)),Cll(1,el(j)),Cll(1,elb(l)),Clpp(1,el(i)),5000,DB(4,n))
-                          n = n + 1
-                       enddo
-                    enddo
+        do l2 =  max(lmin,l1), lmax
+           min_l = max(abs(l1-l2),l2)
+           !below only relevant if there would be another Wigner3J. 
+           if (mod(l1+l2+min_l,2)/=0) then
+              min_l = min_l+1 !l3 should only lead to parity even numbers
+           end if
+           max_l = min(lmax,l1+l2)
+           !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
+           do l3=min_l,max_l, 2 !sum has to be even
+              !diagonal 
+              l3b=l3
+              l2b=l2
+              l1b=l1
+              call assignElls(el,l1,l2,l3)
+              call assignElls(elb,l1b,l2b,l3b)
+              !permutations (total of 36 because only 5 ell are permutable)
+              n = 1
+              do i = 1,6
+                 do j = 1,6
+                    !call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),Clpp(1,el(1,i)),5000,DB(4,n))
+                    call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),pClpp,5000,DB(4,n))
+                    n = n + 1
                  enddo
               enddo
-           enddo
-           !diagonal only
-!!$           n = 1
-!!$           do i = 1, 3 !l1,l2,l3
-!!$              do j = i + 1, i + 2
-!!$                 do k = j + 1, j + 1
-!!$                          !write(*,*) i,j,k,l,m, n
-!!$                          !call deltaB1(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(1,n))
-!!$                          !call deltaB2(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(2,n))
-!!$                          !call deltaB3(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(3,n))
-!!$                          call deltaB4(el(i),el(j),el(k),elb(i),elb(j),Cll(1,:),Clpp(1,:),5000,DB(4,n))
-!!$                          n = n + 1
-!!$                 enddo
-!!$              enddo
-!!$           enddo           
-           !call deltaB4(11,12,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,1))
-           !call deltaB4p(11,12,13,l2b,l3b,a3j,Cll(1,:),Clpp(1,:),5000,DB(4,2))
-!!$           call deltaB4(11,12,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,1))
-!!$           call deltaB4(11,13,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,2))
-!!$           call deltaB4(11,12,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,3))
-!!$           call deltaB4(11,13,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,4))
-!!$
-!!$           call deltaB4(11,12,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,5))
-!!$           call deltaB4(11,13,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,6))
-!!$           call deltaB4(11,12,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,7))
-!!$           call deltaB4(11,13,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,8))
-!!$
-!!$           call deltaB4(11,12,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,9))
-!!$           call deltaB4(11,13,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,10))
-!!$           call deltaB4(11,12,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,11))
-!!$           call deltaB4(11,13,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,12))
-!!$
-!!$           call deltaB4(12,11,13,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,13))
-!!$           call deltaB4(12,13,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,14))
-!!$           call deltaB4(12,11,13,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,15))
-!!$           call deltaB4(12,13,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,16))
-!!$
-!!$           call deltaB4(12,11,13,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,17))
-!!$           call deltaB4(12,13,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,18))
-!!$           call deltaB4(12,11,13,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,19))
-!!$           call deltaB4(12,13,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,20))
-!!$
-!!$           call deltaB4(12,11,13,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,21))
-!!$           call deltaB4(12,13,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,22))
-!!$           call deltaB4(12,11,13,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,23))
-!!$           call deltaB4(12,13,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,24))
-!!$
-!!$           call deltaB4(13,11,12,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,25))
-!!$           call deltaB4(13,12,11,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,26))
-!!$           call deltaB4(13,11,12,l3b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,27))
-!!$           call deltaB4(13,12,11,l2b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,28))
-!!$
-!!$           call deltaB4(13,11,12,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,29))
-!!$           call deltaB4(13,12,11,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,30))
-!!$           call deltaB4(13,11,12,l3b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,31))
-!!$           call deltaB4(13,12,11,l1b,l3b,Cll(1,:),Clpp(1,:),5000,DB(4,32))
-!!$
-!!$           call deltaB4(13,11,12,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,33))
-!!$           call deltaB4(13,12,11,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,34))
-!!$           call deltaB4(13,11,12,l1b,l2b,Cll(1,:),Clpp(1,:),5000,DB(4,35))
-!!$           call deltaB4(13,12,11,l2b,l1b,Cll(1,:),Clpp(1,:),5000,DB(4,36))
-           !endif
-           !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
-           !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
 
-           SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
-           SumTot = SumTot+ sum(DB)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3) !Sum(DBtot)
-           !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
-        enddo !l3
-     enddo !l2
-     !write(*,'(I4,25E17.8)') l1, SumTot, SumDB(1:4,1:6)
-     write(*,'(I4,1E17.8)') l1, SumTot 
+              !endif
+              !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
+              !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
+
+              SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
+              SumTot = SumTot+ sum(DB)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3) !Sum(DBtot)
+              !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
+           enddo !l3
+        enddo !l2
+        !write(*,'(I4,25E17.8)') l1, SumTot, SumDB(1:4,1:6)
+
+        
+     enddo !l1
+     write(12,'(I4,1E17.8)') Lm, SumTot
+     write(*,'(I4,1E17.8)') Lm, SumTot
      call fwig_temp_free();
-  enddo !l1
+  enddo
   !$OMP END PARAllEl DO
-  
+  close(12)
   call fwig_table_free();
-  deallocate(Cl, Cll, Clpp)
+  deallocate(Cl, Cll, pClpp)
 contains
   !Eq. (29) Notes
   subroutine deltaB1(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
@@ -380,7 +189,7 @@ contains
   end subroutine deltaB1
 
   !Eq. (31) Notes; unfortunately we have to rewrite these. I dont think we can use the same code, or can we???
-  
+
   subroutine deltaB2(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
@@ -447,7 +256,7 @@ contains
   end subroutine deltaB3
 
   !Eq. (35) Notes
-  subroutine deltaB4(l1,l2a,l3a,l2b,l3b,Cll1,Cll2,Cll3,CLpp,lmax,DB)
+  subroutine deltaB4x(l1,l2a,l3a,l2b,l3b,Cll1,Cll2,Cll3,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
     real(dl), intent(in) :: Clpp,Cll1,Cll2,Cll3
@@ -458,9 +267,24 @@ contains
        DB = Clpp*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)/(2*l1+1.d0)*Cll1*Cll2*Cll3
        !*Cll(l1)*Cll(l2a)*Cll(l2b)
     endif
-    
+
+  end subroutine deltaB4x
+
+  subroutine deltaB4(l1,l2a,l3a,l2b,l3b,Cll1,Cll2,Cll3,b,lmax,DB)
+    integer, intent(in) :: l1,l2a,l3a,l2b,l3b
+    integer, intent(in) :: lmax
+    real(dl), intent(in) :: Cll1,Cll2,Cll3
+    real(dl), pointer :: b(:,:)
+    real(dl), intent(out) :: DB
+    if  (mod(l1+l2a+l3a,2)/=0 .or. mod(l1+l2b+l3b,2)/=0) then
+       DB = 0.d0
+    else
+       DB = b(1,l1)*Fc(l3a,l1,l2a)*Fc(l3b,l1,l2b)/(2*l1+1.d0)*Cll1*Cll2*Cll3
+       !*Cll(l1)*Cll(l2a)*Cll(l2b)
+    endif
+
   end subroutine deltaB4
-  
+
   !Eq. (35) Notes
   subroutine deltaB4p(l1,l2a,l3a,l2b,l3b,a3j,Cll,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
@@ -472,7 +296,7 @@ contains
     else
        DB = Clpp(l1)*a3j(l2a)*a3j(l2b)*FcM(l3a,l1,l2a)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*Cll(l1)*Cll(l2a)*Cll(l2b)
     endif
-    
+
   end subroutine deltaB4p
 
   !subroutine 
@@ -492,7 +316,7 @@ contains
   real(dl) function Wig0(l1,l2,l3)
     integer :: l1,l2,l3
     Wig0 = fwig3jj(2* l1 , 2* l2 , 2* l3 , 2* 0, 2* 0 , 2* 0)
-    
+
   end function Wig0
 
   real(dl) function LargeArg3Js(l1,l2,l3)
@@ -508,9 +332,27 @@ contains
     if(LargeArg3Js .ne. LargeArg3Js) LargeArg3Js = 0.d0
 
   end function LargeArg3Js
-  
+  subroutine assignElls(el,l1,l2,l3)
+    integer, intent(in):: l1,l2,l3
+    integer, intent(out) :: el(3,6)
+    el(1,1:2) = l1
+    el(1,3:4) = l2
+    el(1,5:6) = l3
+    el(2,1) = l1
+    el(2,2) = l3
+    el(2,3) = l1
+    el(2,4) = l3
+    el(2,5) = l1
+    el(2,6) = l2
+    el(3,1) = l3
+    el(3,2) = l2
+    el(3,3) = l3
+    el(3,4) = l1
+    el(3,5) = l2
+    el(3,6) = l1
+  end subroutine assignElls
 
-    subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
+  subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
     !Recursive evaluation of 3j symbols. Does minimal error checking on input
     !parameters.
     implicit none
@@ -802,6 +644,6 @@ contains
 
   end subroutine GetThreeJs
 
-  
+
 
 endprogram bisvar
