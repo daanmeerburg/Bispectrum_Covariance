@@ -72,7 +72,7 @@ program bisvar
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 200
+  lmax = 1000
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,DB,a3j,i,j,k,l,m,n, el, elb), &
@@ -89,7 +89,7 @@ program bisvar
            min_l = min_l+1 !l3 should only lead to parity even numbers
         end if
         max_l = min(lmax,l1+l2)
-        call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
+        !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
         do l3=min_l,max_l, 2 !sum has to be even
            !diagonal 
            l3b=l3
@@ -259,8 +259,8 @@ program bisvar
                           !write(*,*) i,j,k,l,m, n
                           !call deltaB1(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(1,n))
                           !call deltaB2(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(2,n))
-                          call deltaB3(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(3,n))
-                          !call deltaB4(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(4,n))
+                          !call deltaB3(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(3,n))
+                          call deltaB4(el(i),el(j),el(k),elb(l),elb(m),Cll(1,:),Clpp(1,:),5000,DB(4,n))
                           n = n + 1
                        enddo
                     enddo
@@ -355,7 +355,7 @@ contains
     integer :: i
     integer :: l_min, l_max
     DB  = 0.d0
-
+    stepsum = 0.d0
     l_min = Max(abs(l2b-l2a),2)
     l_min = Max(abs(l3b-l3a),l_min)
     l_max = Min(abs(l2a+l2b),lmax)
@@ -390,7 +390,7 @@ contains
     integer :: i
     integer :: l_min, l_max
     DB  = 0.d0
-
+    stepsum = 0.d0
     l_min = Max(abs(l2b-l3a),2)
     l_min = Max(abs(l3b-l2a),l_min)
     l_max = Min(abs(l2a+l3b),lmax)
@@ -410,7 +410,7 @@ contains
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif
-    DB = Cll(l1)*Cll(l2a)*Cll(l3a)*(-1.d0)**(-l2a-l2b)*DB
+    DB = Cll(l1)*Cll(l2a)*Cll(l3a)*(-1.d0)**(l2a+l2b)*DB
   end subroutine deltaB2
 
   !Eq. (33) Notes
@@ -423,7 +423,7 @@ contains
     integer :: i
     integer :: l_min, l_max
     DB  = 0.d0
-
+    stepsum = 0.d0
     l_min = Max(abs(l3b-l2a),2)
     l_min = Max(abs(l3a-l2b),l_min)
     l_max = Min(abs(l2a+l3b),lmax)
