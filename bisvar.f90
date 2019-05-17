@@ -15,12 +15,15 @@ program bisvar
   integer :: lmax, lmin, l1, l2, l3, l1b, l2b, l3b, el(3,6), elb(3,6)
   integer :: min_l, max_l, Lm
   integer :: i,j, k, l, m, n 
-
-  real(dl)  :: a3j(0:20000)
+  !wigner 3j
+  real(dl)  :: atj(0:20000)
+  real(dl), pointer :: a3j(:,:)
 
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
-  real(dl) :: DB(4,36), SumDB(4,36), SumTot, DBtot(4,36)
+  real(dl) :: DB(4,36), SumDB(4,36), SumTot, DBtot(4,36),SumTotGauss
 
+  real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss
+  real(dl) :: sigsq, fnl
   !call fwig_temp_init(2*1000)
 
   lmax = 5000
@@ -28,6 +31,7 @@ program bisvar
   allocate(Cl(4,2:lmax))
   allocate(Cll(4,2:lmax))
   allocate(pClpp(3,2:lmax))
+  allocate(a3j(2*lmax,2*lmax))
 
   Folder1 = 'SOspectra/'
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
@@ -35,24 +39,7 @@ program bisvar
 
   open(unit=17,file = Clfile, status='old')
   open(unit=18,file = Cllfile, status='old')
-!!$  do j = 1, lmax
-!!$     !#    L    TT             EE             BB             TE 
-!!$     !#    L    TT             EE             BB             TE             PP             TP             EP
-!!$     if (j .eq. 1) then
-!!$        read(17,*)
-!!$        read(18,*)
-!!$        cycle
-!!$     endif
-!!$     
-!!$     read(17,*) l1, Cl(1:4,j),Clpp(1:3,j)
-!!$     read(18,*) l1, Cll(1:4,j)
-!!$     Cll(1:4,j) = 2.*pi*Cll(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
-!!$     Cl(1:4,j) = 2.*pi*Cl(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
-!!$     Clpp(1,j) = 2.*pi*Clpp(1,j)/(real(l1,dl)*(real(l1,dl)+1.))**2
-!!$     Clpp(2:3,j) = 2.*pi*Clpp(2:3,j)/(real(l1,dl)*(real(l1,dl)+1.))**(3.d0/2.d0)/CMB2COBEnorm**(1./2)
-!!$
-!!$     !write(*,*) l1,Cll(1:4,j) 
-!!$  enddo
+
   do j = 1, lmax
      !#    L    TT             EE             BB             TE 
      !#    L    TT             EE             BB             TE             PP             TP             EP
@@ -94,17 +81,25 @@ program bisvar
   !(is this correct?). This would lower the number of sample points. 
   lmax = 1000
   lmin = 400
-  open(unit=12,file='test4.txt', status = 'replace')
+  open(unit=12,file='SNratio_v1.3.txt', status = 'replace')
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(Lm,lmax,l1,l2,l3,l1b,l2b,l3b,min_l,max_l,DB,a3j,i,j,k,l,m,n, el, elb), &
-  !$OMP REDUCTION(+:SumDB,Sumtot)
-  do Lm = 500,3000,20
+  !$OMP PRIVATE(DSNGauss,DSNonGauss,sigsq,fnl,atj),&
+  !$OMP REDUCTION(+:SumDB,Sumtot,TotSumGauss,TotSumNGauss,SumTotGauss)
+  !do l1 = lmin, lmax
+  do Lm = 500,1200,30
      lmax = Lm
      call fwig_thread_temp_init(2*lmax)
      DB = 0.d0
      SumDB(1:4,1:36) = 0.d0
      Sumtot = 0.d0
+     SumTotGauss = 0.d0
+     DSNGauss = 0.d0
+     DSNonGauss = 0.d0
+     TotSumGauss = 0.d0
+     TotSumNGauss = 0.d0
+     !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
      do l1 = lmin, lmax
 
         do l2 =  max(lmin,l1), lmax
@@ -114,12 +109,12 @@ program bisvar
               min_l = min_l+1 !l3 should only lead to parity even numbers
            end if
            max_l = min(lmax,l1+l2)
-           !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
+           call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
            do l3=min_l,max_l, 2 !sum has to be even
               !diagonal 
-              l3b=l3
-              l2b=l2
-              l1b=l1
+              l3b=l3+100
+              l2b=l2+100
+              l1b=l1+100
               call assignElls(el,l1,l2,l3)
               call assignElls(elb,l1b,l2b,l3b)
               !permutations (total of 36 because only 5 ell are permutable)
@@ -131,13 +126,27 @@ program bisvar
                     n = n + 1
                  enddo
               enddo
+              
+              !signal squared (in SW limit)
+              fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
+              sigsq = fnl**2
 
+              !delta (S/N)^2 Gaussian covariance 
+              DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+
+              !delta (S/N)^2 Non-Gaussian covariance
+              DSNonGauss = sigsq/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3) +sum(DB(4,1:36)))
               !endif
               !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
               !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
 
-              SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
-              SumTot = SumTot+ sum(DB)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3) !Sum(DBtot)
+              TotSumGauss = TotSumGauss + DSNGauss
+              TotSumNGauss = TotSumNGauss + DSNonGauss
+              !SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
+              !DB(4,1:36) = DB(4,1:36)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+              SumTot = SumTot+ DB(4,1) ! sum(DB(4,1:36))
+              
+              SumTotGauss = SumTotGauss + Cll(1,l1)*Cll(1,l2)*Cll(1,l3) !Sum(DBtot)
               !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
            enddo !l3
         enddo !l2
@@ -145,14 +154,15 @@ program bisvar
 
         
      enddo !l1
-     write(12,'(I4,1E17.8)') Lm, SumTot
-     write(*,'(I4,1E17.8)') Lm, SumTot
+     write(12,'(I4,3E17.8)') Lm, TotSumGauss**(-1.d0/2.d0),TotSumNGauss**(-1.d0/2.d0), (TotSumGauss/TotSumNGauss)**(-1.d0/2.d0)
+     write(*,'(I4,6E17.8)') Lm, TotSumGauss**(-1.d0/2.d0),TotSumNGauss**(-1.d0/2.d0), (TotSumGauss/TotSumNGauss)**(-1.d0/2.d0), SumTot, SumTotGauss
      call fwig_temp_free();
   enddo
   !$OMP END PARAllEl DO
   close(12)
   call fwig_table_free();
   deallocate(Cl, Cll, pClpp)
+  deallocate(a3j)
 contains
   !Eq. (29) Notes
   subroutine deltaB1(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
@@ -351,7 +361,25 @@ contains
     el(3,5) = l2
     el(3,6) = l1
   end subroutine assignElls
+  real(dl) function floc(l1,l2,l3)
+    !SW approximation 
+    integer :: l1, l2, l3
+    real(dl) :: amp
+    real(dl) :: As = 2.1056d-9
+    !from https://arxiv.org/pdf/0812.3413.pdf Eq. 19 and 20
+    amp = (2.d0/27./pi**2)*As
+    floc = 1.d0/(l1+1.d0)/l1/l2/(l2+1.d0) + 1.d0/(l3+1.d0)/l3/l2/(l2+1.d0) + &
+         1.d0/(l1+1.d0)/l1/l3/(l3+1.d0)
+    floc = floc*amp
+  end function floc
 
+
+  real function prefactor(l1,l2,l3)
+    integer, intent(in) :: l1,l2,l3
+
+    prefactor = 2.0*sqrt((1./4.)*((2.*l1+1.)*(2.*l2+1.)*(2.*l3+1.))/pi)
+  end function prefactor
+  
   subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
     !Recursive evaluation of 3j symbols. Does minimal error checking on input
     !parameters.
