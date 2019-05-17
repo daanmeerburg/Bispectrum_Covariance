@@ -115,7 +115,7 @@ program bisvar
            do l3=min_l,max_l, 2 !sum has to be even
             !diagonal
             l1b=l1
-            do l2b =  max(lmin,l1b), lmax
+            do l2b = l2, l2 ! =  max(lmin,l1b), lmax
              min_lb= max(abs(l1-l2),l2)
              !below only relevant if there would be another Wigner3J. 
              if (mod(l1b+l2b+min_lb,2)/=0) then
@@ -123,7 +123,7 @@ program bisvar
              end if
              max_lb = min(lmax,l1b+l2b)
              call GetThreeJs(atj2(abs(l2b-l1b)),l1b,l2b,0,0)
-             do l3b=min_lb,max_lb, 2 !sum has to be even
+             do l3b=l3, l3!min_lb,max_lb, 2 !sum has to be even
                 ! l3b=l3+100
                 ! l2b=l2+100
                 call assignElls(el,l1,l2,l3)
@@ -141,7 +141,7 @@ program bisvar
                 !signal squared (in SW limit)
                 fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
 
-                sigsq = fnl*floc(l1b,l2b,l3b)*atj2(l3b)*prefactor(l1b,l2b,l3)
+                sigsq = fnl*floc(l1b,l2b,l3b)*atj2(l3b)*prefactor(l1b,l2b,l3b)
                 !sigsq = fnl**2
 
                 !delta (S/N)^2 Gaussian covariance 
@@ -176,8 +176,8 @@ program bisvar
 
         
      enddo !l1
-     write(12,'(I4,3E17.8)') Lm, TotSumGauss**(-1.d0/2.d0),TotSumNGauss**(-1.d0/2.d0), (TotSumGauss/TotSumNGauss)**(-1.d0/2.d0)
-     write(*,'(I4,6E17.8)') Lm, TotSumGauss**(-1.d0/2.d0),TotSumNGauss**(-1.d0/2.d0), (TotSumGauss/TotSumNGauss)**(-1.d0/2.d0), SumTot, SumTotGauss
+     write(12,'(I4,3E17.8)') Lm, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0)
+     write(*,'(I4,6E17.8)') Lm, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0), SumTot, SumTotGauss
      call fwig_temp_free();
   enddo
   !$OMP END PARAllEl DO
