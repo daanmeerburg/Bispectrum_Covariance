@@ -13,10 +13,10 @@ program bisvar
   real(dl), pointer :: pClpp(:,:)
   !integer :: l1, l2, l3
   integer :: lmax, lmin, l1, l2, l3, l1b, l2b, l3b, el(3,6), elb(3,6)
-  integer :: min_l, max_l, Lm
+  integer :: min_l, max_l, Lm,min_lb, max_lb
   integer :: i,j, k, l, m, n 
   !wigner 3j
-  real(dl)  :: atj(0:20000)
+  real(dl)  :: atj(0:20000),atj2(0:20000)
   real(dl), pointer :: a3j(:,:)
 
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
@@ -84,11 +84,12 @@ program bisvar
   open(unit=12,file='SNratio_v1.3.txt', status = 'replace')
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-  !$OMP PRIVATE(Lm,lmax,l1,l2,l3,l1b,l2b,l3b,min_l,max_l,DB,a3j,i,j,k,l,m,n, el, elb), &
+  !$OMP PRIVATE(Lm,lmax,l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,atj2,i,j,k,l,m,n, el, elb), &
   !$OMP PRIVATE(DSNGauss,DSNonGauss,sigsq,fnl,atj),&
   !$OMP REDUCTION(+:SumDB,Sumtot,TotSumGauss,TotSumNGauss,SumTotGauss)
   !do l1 = lmin, lmax
-  do Lm = 1000,2500,500
+
+  do Lm = 450,500,10
      lmax = Lm
      call fwig_thread_temp_init(2*lmax)
      DB = 0.d0
@@ -101,7 +102,8 @@ program bisvar
      TotSumNGauss = 0.d0
      !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
      do l1 = lmin, lmax
-
+        write(*,*) lmin,lmax,l1
+        !call calcWigners2D(l1,lmin,lmax,a3j)
         do l2 =  max(lmin,l1), lmax
            min_l = max(abs(l1-l2),l2)
            !below only relevant if there would be another Wigner3J. 
@@ -111,43 +113,63 @@ program bisvar
            max_l = min(lmax,l1+l2)
            call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
            do l3=min_l,max_l, 2 !sum has to be even
-              !diagonal 
-              l3b=l3
-              l2b=l2
-              l1b=l1
-              call assignElls(el,l1,l2,l3)
-              call assignElls(elb,l1b,l2b,l3b)
-              !permutations (total of 36 because only 5 ell are permutable)
-              n = 1
-              do i = 1,6
-                 do j = 1,6
-                    !call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),Clpp(1,el(1,i)),5000,DB(4,n))
-                    call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),pClpp,5000,DB(4,n))
-                    n = n + 1
-                 enddo
-              enddo
-              
-              !signal squared (in SW limit)
-              fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
-              sigsq = fnl**2
+            !diagonal
+            l1b=l1
+            do l2b =  max(lmin,l1b), lmax
+             min_lb= max(abs(l1-l2),l2)
+             !below only relevant if there would be another Wigner3J. 
+             if (mod(l1b+l2b+min_lb,2)/=0) then
+                min_lb = min_lb+1 !l3 should only lead to parity even numbers
+             end if
+             max_lb = min(lmax,l1b+l2b)
+             call GetThreeJs(atj2(abs(l2b-l1b)),l1b,l2b,0,0)
+             do l3b=min_lb,max_lb, 2 !sum has to be even
+                ! l3b=l3+100
+                ! l2b=l2+100
+                call assignElls(el,l1,l2,l3)
+                call assignElls(elb,l1b,l2b,l3b)
+                !permutations (total of 36 because only 5 ell are permutable)
+                n = 1
+                do i = 1,6
+                   do j = 1,6
+                      !call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),Clpp(1,el(1,i)),5000,DB(4,n))
+                      call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),pClpp,5000,DB(4,n))
+                      n = n + 1
+                   enddo
+                enddo
+                
+                !signal squared (in SW limit)
+                fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
 
-              !delta (S/N)^2 Gaussian covariance 
-              DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+                sigsq = fnl*floc(l1b,l2b,l3b)*atj2(l3b)*prefactor(l1b,l2b,l3)
+                !sigsq = fnl**2
 
-              !delta (S/N)^2 Non-Gaussian covariance
-              DSNonGauss = sigsq/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3) +sum(DB(4,1:36)))
-              !endif
-              !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
-              !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
+                !delta (S/N)^2 Gaussian covariance 
+                if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
+                  !write(*,*),l1,l2,l3,l1b,l2b,l3b,sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3),atj(l3),atj2(l3b)
+                  DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+                else
+                  DSNGauss = 0
+                  SumTotGauss = SumTotGauss + 1/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)) !Sum(DBtot)
+                endif
+                !delta (S/N)^2 Non-Gaussian covariance
+                DSNonGauss = sigsq*sum(DB(4,1:36))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
+                !endif
+                !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
+                !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
 
-              TotSumGauss = TotSumGauss + DSNGauss
-              TotSumNGauss = TotSumNGauss + DSNonGauss
-              !SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
-              !DB(4,1:36) = DB(4,1:36)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
-              SumTot = SumTot+ DB(4,1) ! sum(DB(4,1:36))
-              
-              SumTotGauss = SumTotGauss + Cll(1,l1)*Cll(1,l2)*Cll(1,l3) !Sum(DBtot)
-              !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
+                TotSumGauss = TotSumGauss + DSNGauss
+                TotSumNGauss = TotSumNGauss + DSNonGauss
+                !SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
+                !DB(4,1:36) = DB(4,1:36)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+                SumTot = SumTot+ sum(DB(4,1:36))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b)) ! sum(DB(4,1:36))
+                
+                !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
+              enddo !l3b
+            enddo !l2b
+            ! if (TotSumGauss .ne. 0) then
+            !  write(*,*) TotSumGauss, TotSumNGauss
+            ! endif
            enddo !l3
         enddo !l2
         !write(*,'(I4,25E17.8)') l1, SumTot, SumDB(1:4,1:6)
@@ -361,6 +383,19 @@ contains
     el(3,5) = l2
     el(3,6) = l1
   end subroutine assignElls
+
+  ! subroutine calcWigners2D(l1,lmin,lmax,a3jArr)
+  !   integer, intent (in) :: l1, lmax,lmin
+  !   integer ::  l2,min_l
+  !   real(dl), pointer :: a3jArr(:,:)
+  !   do l2 = lmin,lmax
+  !      !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
+  !      call GetThreeJs(a3jArr(l2,abs(l2-l1)),l1,l2,0,0)
+  !   a3jArr = a3jArr + transpose(a3jArr)
+  !   end do
+  ! end subroutine calcWigners2D
+
+
   real(dl) function floc(l1,l2,l3)
     !SW approximation 
     integer :: l1, l2, l3
