@@ -150,7 +150,7 @@ program bisvar
                   DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
                 else
                   DSNGauss = 0
-                  SumTotGauss = SumTotGauss + Cll(1,l1)*Cll(1,l2)*Cll(1,l3) !Sum(DBtot)
+                  SumTotGauss = SumTotGauss + 1/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)) !Sum(DBtot)
                 endif
                 !delta (S/N)^2 Non-Gaussian covariance
                 DSNonGauss = sigsq*sum(DB(4,1:36))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
@@ -162,7 +162,7 @@ program bisvar
                 TotSumNGauss = TotSumNGauss + DSNonGauss
                 !SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
                 !DB(4,1:36) = DB(4,1:36)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
-                SumTot = SumTot+ sum(DB(4,1:36)) ! sum(DB(4,1:36))
+                SumTot = SumTot+ sum(DB(4,1:36))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b)) ! sum(DB(4,1:36))
                 
                 !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
               enddo !l3b
