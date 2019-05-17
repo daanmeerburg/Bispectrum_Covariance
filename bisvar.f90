@@ -80,7 +80,7 @@ program bisvar
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
   lmax = 1000
-  lmin = 400
+  lmin = 20
   open(unit=12,file='SNratio_v1.3.txt', status = 'replace')
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
@@ -88,6 +88,7 @@ program bisvar
   !$OMP PRIVATE(DSNGauss,DSNonGauss,sigsq,fnl,atj),&
   !$OMP REDUCTION(+:SumDB,Sumtot,TotSumGauss,TotSumNGauss,SumTotGauss)
   !do l1 = lmin, lmax
+
   do Lm = 450,500,10
      lmax = Lm
      call fwig_thread_temp_init(2*lmax)
@@ -406,6 +407,23 @@ contains
     floc = floc*amp
   end function floc
 
+  subroutine calcWigners2D(l1,lmin,lmax,a3jArr)
+   integer, intent (in) :: l1, lmax,lmin
+   integer ::  l2, l3,min_l
+   real(dl) :: a3jArr(2*lmax,2*lmax)
+   do l2 = lmin,lmax
+      min_l = max(abs(l1-l2),l2)
+      !below only relevant if there would be another Wigner3J.
+      if (mod(l1+l2+min_l,2)/=0) then
+         min_l = min_l+1 !l3 should only lead to parity even numbers
+      end if
+      max_l = min(lmax,l1+l2)
+      !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
+      call GetThreeJs(a3jArr(abs(l2-l1),l2),l1,l2,0,0)
+
+      a3jArr = a3jArr + transpose(a3jArr)
+   end do
+ end subroutine calcWigners2D
 
   real function prefactor(l1,l2,l3)
     integer, intent(in) :: l1,l2,l3
