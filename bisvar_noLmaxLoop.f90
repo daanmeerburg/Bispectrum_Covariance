@@ -78,8 +78,8 @@ program bisvar
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 304
-  lmin = 300
+  lmax = 50
+  lmin = 2
   DB = 0.d0
   SumDB(1:4,1:36) = 0.d0
   Sumtot = 0.d0
@@ -134,7 +134,7 @@ program bisvar
          end if
          max_lb = min(lmax,l1b+l2b)
          !call GetThreeJs(atj2(abs(l2b-l1b)),l1b,l2b,0,0)
-         do l3b=min_lb,max_lb!min_lb,max_lb, 2 !sum has to be even
+         do l3b=min_lb,max_lb,2!min_lb,max_lb, 2 !sum has to be even
             ! l3b=l3+100
             ! l2b=l2+100
             ! call assignElls(el,l1,l2,l3)
