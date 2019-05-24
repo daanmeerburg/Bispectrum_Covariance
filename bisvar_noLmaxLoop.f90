@@ -23,8 +23,11 @@ program bisvar
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
   real(dl) :: DB(4,36), SumDB(4,36), SumTot, DBtot(4,36),SumTotGauss
 
-  real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss
+  real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss,TotSumNGaussBD4
   real(dl) :: sigsq, fnl
+
+  logical :: daanWiger
+  logical :: doAllTerms
   !call fwig_temp_init(2*1000)
 
   lmax = 5000
@@ -79,8 +82,10 @@ program bisvar
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 200
-  lmin = 2
+
+  lmax = 1150
+  lmin = 1000
+
   DB = 0.d0
   SumDB(1:4,1:36) = 0.d0
   Sumtot = 0.d0
@@ -89,50 +94,70 @@ program bisvar
   DSNonGauss = 0.d0
   TotSumGauss = 0.d0
   TotSumNGauss = 0.d0
+  TotSumNGaussBD4 = 0.d0
 
-  open(unit=12,file='SNratio_v1.3.txt', status = 'replace')
+  daanWiger = .True.
+  doAllTerms = .True.
+
+  !open(unit=12,file='SNratio_v1.3.txt', status = 'replace')
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(Lm,l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,atj2,i,j,k,l,m,n, el, elb), &
   !$OMP PRIVATE(DSNGauss,DSNonGauss,sigsq,fnl,atj),&
-  !$OMP REDUCTION(+:SumDB,Sumtot,TotSumGauss,TotSumNGauss,SumTotGauss)
+  !$OMP REDUCTION(+:SumDB,Sumtot,TotSumGauss,TotSumNGauss,TotSumNGaussBD4,SumTotGauss)
   !do l1 = lmin, lmax
   ! do Lm = 450,500,10
   !    lmax = Lm
   do l1 = lmin, lmax, deltaL
      !call fwig_thread_temp_init(2*lmax)
      allocate(a3j(2*lmax,2*lmax))
-     a3j = 0.d0
-     if (mod(l1,30) .eq. 0) then
+
+     if (mod(l1,10) .eq. 0) then
         write(*,*) l1
      endif
-     !mwrite(*,*) l1
-     do l2 = lmin, lmax, deltaL
-        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
-        a3j(l2,1:2*lmax) = atj(1:2*lmax)
+     do l2 = lmin, lmax
+        !!call GetThreeJs(a3j(l2,abs(l2-l1)),l1,l2,0,0)           
+        if (daanWiger) then
+           min_l = max(abs(l1-l2),lmin)  
+           if (mod(l1+l2+min_l,2)/=0) then
+              min_l = min_l+1 !l3 should only lead to parity even numbers
+           end if
+           max_l = min(lmax,l1+l2)
+           !call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+           do l3=min_l,max_l, 2 !sum has to be even
+              a3j(l2,l3) = wigner3jm0(l1,l2,l3)
+           enddo
+        else
+           call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+           a3j(l2,1:2*lmax) = atj(1:2*lmax)
+        endif
      enddo
-
-     
-     do l2 =  lmin, lmax, deltaL
-        min_l = max(abs(l1-l2),l2)
+     !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
+     !call calcWigners2D(l1,lmin,lmax,a3j)
+     do l2 =  lmin, lmax
+        ! if (mod(l2,10) .eq. 0) then
+        !   write(*,*) l1,l2
+        ! endif
+        min_l = max(abs(l1-l2),lmin)
         !below only relevant if there would be another Wigner3J. 
         if (mod(l1+l2+min_l,2)/=0) then
-           min_l = min_l+deltaL !skip to next value 
+           min_l = min_l+1 !l3 should only lead to parity even numbers
         end if
         max_l = min(lmax,l1+l2)
-        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
-        do l3=min_l,max_l, deltaL !sum has to be even
+        !call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+        do l3=min_l,max_l, 2 !sum has to be even
            !diagonal 
+
            l1b=l1
-           do l2b =  lmin,lmax, deltaL!max(lmin,l1b), lmax
-              min_lb= max(abs(l1b-l2b),l2b)
+           do l2b =  lmin,lmax!max(lmin,l1b), lmax
+              min_lb= max(abs(l1b-l2b),lmin)
               !below only relevant if there would be another Wigner3J. 
               if (mod(l1b+l2b+min_lb,2)/=0) then
-                 min_lb = min_lb+deltaL !l3 should only lead to parity even numbers
+                 min_lb = min_lb+1 !l3 should only lead to parity even numbers
               end if
               max_lb = min(lmax,l1b+l2b)
-              call GetThreeJs(atj2(abs(l2b-l1b)),l1b,l2b,0,0)
-              do l3b=min_lb,max_lb, deltaL 
+              !call GetThreeJs(atj2(abs(l2b-l1b)),l1b,l2b,0,0)
+              do l3b=min_lb,max_lb,2!min_lb,max_lb, 2 !sum has to be even
                  ! l3b=l3+100
                  ! l2b=l2+100
                  ! call assignElls(el,l1,l2,l3)
@@ -146,40 +171,64 @@ program bisvar
                  !       n = n + 1
                  !    enddo
                  ! enddo
+                 ! call deltaB4DaanWig(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,1))
+                 ! call deltaB4DaanWig(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,2))
+                 ! call deltaB4DaanWig(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,3))
+                 ! call deltaB4DaanWig(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,4))
+
                  call deltaB4Will(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,1))
                  call deltaB4Will(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,2))
                  call deltaB4Will(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,3))
                  call deltaB4Will(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,4))
-
+                 if (doAllTerms) then 
+                    call deltaB1(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l3),pClpp,5000,DB(1,1)) 
+                    call deltaB1(l1,l2b,l3b,l2,l3,Cll(1,l1),Cll(1,l2b),Cll(1,l3b),pClpp,5000,DB(1,2)) 
+                    call deltaB2(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l3),pClpp,5000,DB(2,1)) 
+                    call deltaB2(l1,l2b,l3b,l2,l3,Cll(1,l1),Cll(1,l2b),Cll(1,l3b),pClpp,5000,DB(2,2)) 
+                    call deltaB3(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(3,1)) 
+                    call deltaB3(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l3b),pClpp,5000,DB(3,2)) 
+                    call deltaB3(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2b),Cll(1,l3),pClpp,5000,DB(3,3)) 
+                    call deltaB3(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l3b),Cll(1,l3),pClpp,5000,DB(3,4)) 
+                 endif
+                 !! call deltaB2(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l3),Cll(1,l2),pClpp,5000,DB(2,3)) 
+                 !! call deltaB2(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l3),Cll(1,l2),pClpp,5000,DB(2,4)) 
+                 !! call deltaB1(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l3),Cll(1,l2),pClpp,5000,DB(1,3)) 
+                 !! call deltaB1(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l3),Cll(1,l2),pClpp,5000,DB(1,4)) 
                  ! if ((DB(4,1) .NE. DB(4,1)) .OR. (DB(4,2) .NE. DB(4,2)) .OR. (DB(4,3) .NE. DB(4,3)) .OR. (DB(4,4) .NE. DB(4,4))) then
                  !   write(*,*) l1,l2,l3,l2b,l3b,DB
                  ! endif
 
-                 !signal squared (in SW limit)
-                 fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
-
-                 sigsq = fnl*floc(l1b,l2b,l3b)*atj2(l3b)*prefactor(l1b,l2b,l3b)
+                 !signal squared (in SW limit) 
+                 fnl = floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
+                 sigsq = fnl*floc(l1b,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
+                 ! fnl = floc(l1,l2,l3)*wigner3jm0(l1,l2,l3)*prefactor(l1,l2,l3)
+                 ! sigsq = fnl*floc(l1b,l2b,l3b)*wigner3jm0(l1,l2b,l3b)*prefactor(l1b,l2b,l3b)
                  !sigsq = fnl**2
 
                  !delta (S/N)^2 Gaussian covariance 
-                 if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
+                 if ((l1.eq.l1b) .and. (((l2 .eq.l2b) .and. (l3 .eq.l3b)) .or.((l2 .eq.l3b) .and. (l3 .eq.l2b)))) then
                     !write(*,*),l1,l2,l3,l1b,l2b,l3b,sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3),atj(l3),atj2(l3b)
                     DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
                  else
-                    DSNGauss = 0.d0
-                    SumTotGauss = SumTotGauss + 1/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)) !Sum(DBtot)
+                    DSNGauss = 0
+                    !SumTotGauss = SumTotGauss + 1/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)) !Sum(DBtot)
                  endif
                  !delta (S/N)^2 Non-Gaussian covariance
                  DSNonGauss = sigsq*sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
+                 TotSumNGaussBD4 = TotSumNGaussBD4 + DSNonGauss
+                 DSNonGauss = DSNonGauss+ sigsq*sum(DB(1,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
+                 DSNonGauss = DSNonGauss+ sigsq*sum(DB(2,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
+                 DSNonGauss = DSNonGauss+ sigsq*sum(DB(3,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
                  !endif
                  !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
                  !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
 
-                 TotSumGauss = TotSumGauss + DSNGauss*(deltaL)**3
-                 TotSumNGauss = TotSumNGauss + DSNonGauss*(deltaL)**3
+                 TotSumGauss = TotSumGauss + DSNGauss
+                 TotSumNGauss = TotSumNGauss + DSNonGauss
                  !SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
                  !DB(4,1:36) = DB(4,1:36)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
                  SumTot = SumTot+ sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b)) ! sum(DB(4,1:36))
+                 !write(12,'(5I4,4E17.8)') l1,l2,l3,l2b,l3b,DB(4,1:4)
 
                  !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
               enddo !l3b
@@ -191,13 +240,13 @@ program bisvar
      enddo !l2
      !write(*,'(I4,25E17.8)') l1, SumTot, SumDB(1:4,1:6)
      ! write(*,*), l1,TotSumGauss,TotSumNGauss
-     !call fwig_temp_free();       
+     call fwig_temp_free();       
      deallocate(a3j) 
   enddo !l1
   !$OMP END PARAllEl DO
-  write(12,'(I4,3E17.8)') Lm, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0)
-  write(*,'(I4,6E17.8)') Lm, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0), SumTot, SumTotGauss
-  write(*,'(I4,6E17.8)') Lm, TotSumGauss,TotSumNGauss, (TotSumNGauss/TotSumGauss), SumTot, SumTotGauss
+
+  write(*,'(I4,8E17.8)') Lm, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0), (TotSumNGaussBD4/TotSumGauss)**(1.d0/2.d0), (TotSumNGaussBD4/TotSumNGauss)**(1.d0/2.d0), SumTot, SumTotGauss
+  write(*,'(I4,8E17.8)') Lm, TotSumGauss,TotSumNGauss, (TotSumNGauss/TotSumGauss),(TotSumNGaussBD4/TotSumGauss),(TotSumNGaussBD4/TotSumNGauss), SumTot, SumTotGauss
 
 
   close(12)
@@ -206,10 +255,12 @@ program bisvar
 
 contains
   !Eq. (29) Notes
-  subroutine deltaB1(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
+  subroutine deltaB1(l1,l2a,l3a,l2b,l3b,Cll1a,Cll2a,Cll3a,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
-    real(dl), intent(in) :: Clpp(2:lmax),Cll(2:lmax)
+    real(dl), intent(in) :: Cll1a,Cll2a,Cll3a
+    !real(dl), intent(in) :: Cll(2:lmax)! Clpp(2:lmax),
+    real(dl), pointer :: clpp(:,:)
     real(dl), intent(out) :: DB
     real(dl) :: stepsum
     integer :: i
@@ -230,21 +281,24 @@ contains
        !removed. Might speed up code. 
     else !otherwise do the sum 
        do i = l_min, l_max, 2 !L
-          stepsum = fwig6jj(2* l1 , 2* l3a , 2* l2a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(i)* &
+          stepsum = fwig6jj(2* l1 , 2* l3a , 2* l2a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(1,i)* &
                Fc(l2b,i,l2a)*Fc(l3b,i,l3a)
           DB = DB + stepsum
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif
-    DB = Cll(l1)*Cll(l2a)*Cll(l3a)*(-1.d0)**(l3a+l2b)*DB
+    DB = Cll1a*Cll2a*Cll3a*(-1.d0)**(l3a+l2b)*DB
   end subroutine deltaB1
 
   !Eq. (31) Notes; unfortunately we have to rewrite these. I dont think we can use the same code, or can we???
 
-  subroutine deltaB2(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
+  subroutine deltaB2(l1,l2a,l3a,l2b,l3b,Cll1a,Cll2a,Cll3a,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
-    real(dl), intent(in) :: Clpp(2:lmax),Cll(2:lmax)
+    real(dl), intent(in) :: Cll1a,Cll2a,Cll3a
+    !real(dl), intent(in) :: Cll(2:lmax)! Clpp(2:lmax),
+    real(dl), pointer :: clpp(:,:)
+    !real(dl), intent(in) :: Clpp(2:lmax),Cll(2:lmax)
     real(dl), intent(out) :: DB
     real(dl) :: stepsum
     integer :: i
@@ -264,20 +318,23 @@ contains
        DB = 0.d0
     else !otherwise do the sum 
        do i = l_min, l_max, 2 !L
-          stepsum = fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(i)* &
+          stepsum = fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(1,i)* &
                Fc(l2b,i,l3a)*Fc(l3b,i,l2a)
           DB = DB + stepsum
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif
-    DB = Cll(l1)*Cll(l2a)*Cll(l3a)*(-1.d0)**(l2a+l2b)*DB
+    DB = Cll1a*Cll2a*Cll3a*(-1.d0)**(l2a+l2b)*DB
   end subroutine deltaB2
 
   !Eq. (33) Notes
-  subroutine deltaB3(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
+  subroutine deltaB3(l1,l2a,l3a,l2b,l3b,Cll1a,Cll2a,Cll2b,CLpp,lmax,DB)
     integer, intent(in) :: l1,l2a,l3a,l2b,l3b
     integer, intent(in) :: lmax
-    real(dl), intent(in) :: Clpp(2:lmax),Cll(2:lmax)
+    real(dl), intent(in) :: Cll1a,Cll2a,Cll2b
+    !real(dl), intent(in) :: Cll(2:lmax)! Clpp(2:lmax),
+    real(dl), pointer :: clpp(:,:)
+    !real(dl), intent(in) :: Clpp(2:lmax),Cll(2:lmax)
     real(dl), intent(out) :: DB
     real(dl) :: stepsum
     integer :: i
@@ -297,13 +354,13 @@ contains
        DB = 0.d0
     else !otherwise do the sum 
        do i = l_min, l_max, 2 !L
-          stepsum = fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(i)* &
+          stepsum = fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(1,i)* &
                Fc(l3b,i,l2a)*Fc(l3a,i,l2b)
           DB = DB + stepsum
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif
-    DB = Cll(l1)*Cll(l2a)*Cll(l2b)*(-1.d0)**(-l2a-l2b)*DB
+    DB = Cll1a*Cll2a*Cll2b*(-1.d0)**(-l2a-l2b)*DB
   end subroutine deltaB3
 
   !Eq. (35) Notes
@@ -351,6 +408,21 @@ contains
     endif
 
   end subroutine deltaB4Will
+
+  subroutine deltaB4DaanWig(l1,l2a,l3a,l2b,l3b,Cll1,Cll2,Cll3,clpp,lmax,DB)
+    integer, intent(in) :: l1,l2a,l3a,l2b,l3b
+    integer, intent(in) :: lmax
+    real(dl), intent(in) :: Cll1,Cll2,Cll3
+    real(dl), pointer :: clpp(:,:)
+    real(dl), intent(out) :: DB
+    if  (mod(l1+l2a+l3a,2)/=0 .or. mod(l1+l2b+l3b,2)/=0) then
+       DB = 0.d0
+    else
+       DB = clpp(1,l1)*wigner3jm0(l1,l2a,l3a)*wigner3jm0(l1,l3b,l2b)*FcM(l3a,l1,l2a)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*Cll1*Cll2*Cll3
+       !*Cll(l1)*Cll(l2a)*Cll(l2b)
+    endif
+
+  end subroutine deltaB4DaanWig
 
   ! !Eq. (35) Notes
   ! subroutine deltaB4p(l1,l2a,l3a,l2b,l3b,a3j,Cll,CLpp,lmax,DB)
@@ -405,7 +477,7 @@ contains
     el(1,1:2) = l1
     el(1,3:4) = l2
     el(1,5:6) = l3
-    el(2,1) = l1
+    el(2,1) = l2
     el(2,2) = l3
     el(2,3) = l1
     el(2,4) = l3
@@ -449,6 +521,38 @@ contains
 
     prefactor = 2.0*sqrt((1./4.)*((2.*l1+1.)*(2.*l2+1.)*(2.*l3+1.))/pi)
   end function prefactor
+
+
+  real(dl) function wigner3jm0(l1,l2,l3)
+    integer, intent (in) :: l1,l2,l3
+    integer :: LtX, LtY, LtZ, Lt
+    LtX = -l1+l2+l3
+    LtY = l1-l2+l3
+    LtZ = l1+l2-l3
+    Lt  = l1+l2+l3
+    if(mod(Lt,2)/=0) then
+       wigner3jm0  = 0.d0
+    else
+       wigner3jm0 = (-1)**(lt/2) *et(Lt)*rmj(Lt/2)/(rmj(LtX/2)*rmj(LtY/2)*rmj(LtZ/2)) * &
+            sqrt(rmj(LtX)*rmj(LtY)*rmj(LtZ)/rmj(Lt+1))
+    endif
+  end function wigner3jm0
+
+  real(dl) function rmj(x)
+    integer :: x
+    rmj = Sqrt(pi)*(((8.*x + 4.)*x + 1)*x + 1/30.)**(1./6.)
+
+  end function rmj
+
+  real(dl) function et(L)
+    integer :: L
+    real(dl) :: temp
+    real(dl), parameter :: Euler = 2.7182818284590452353602874713526624977572470937000
+    temp = L*Log(L/(L+1.))-Log(L+1.)
+    et  = sqrt(Euler)*Exp(temp/2.)
+  end function et
+
+
 
   subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
     !Recursive evaluation of 3j symbols. Does minimal error checking on input
