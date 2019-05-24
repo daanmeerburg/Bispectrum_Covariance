@@ -18,6 +18,7 @@ program bisvar
   !wigner 3j
   real(dl)  :: atj(0:20000),atj2(0:20000)
   real(dl), pointer :: a3j(:,:)
+  real(dl), allocatable :: a3jArr(:,:)
 
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
   real(dl) :: DB(4,36), SumDB(4,36), SumTot, DBtot(4,36),SumTotGauss
@@ -26,12 +27,13 @@ program bisvar
   real(dl) :: sigsq, fnl
   !call fwig_temp_init(2*1000)
 
-  lmax = 5000
+  !a3j => a3jArr
+  lmax = 500
   lmin = 2
   allocate(Cl(4,2:lmax))
   allocate(Cll(4,2:lmax))
   allocate(pClpp(3,2:lmax))
-  allocate(a3j(2*lmax,2*lmax))
+  allocate(a3jArr(100,100))
 
   Folder1 = 'SOspectra/'
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
@@ -80,12 +82,12 @@ program bisvar
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
   lmax = 1000
-  lmin = 20
+  lmin = 400
   open(unit=12,file='SNratio_v1.3.txt', status = 'replace')
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(Lm,lmax,l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,atj2,i,j,k,l,m,n, el, elb), &
-  !$OMP PRIVATE(DSNGauss,DSNonGauss,sigsq,fnl,atj),&
+  !$OMP PRIVATE(DSNGauss,DSNonGauss,sigsq,fnl,atj,a3jArr),&
   !$OMP REDUCTION(+:SumDB,Sumtot,TotSumGauss,TotSumNGauss,SumTotGauss)
   !do l1 = lmin, lmax
 
@@ -102,7 +104,9 @@ program bisvar
      TotSumNGauss = 0.d0
      !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
      do l1 = lmin, lmax
+
         !call calcWigners2D(l1,lmin,lmax,a3j)
+
         do l2 =  max(lmin,l1), lmax
            min_l = max(abs(l1-l2),l2)
            !below only relevant if there would be another Wigner3J. 
@@ -183,7 +187,7 @@ program bisvar
   close(12)
   call fwig_table_free();
   deallocate(Cl, Cll, pClpp)
-  deallocate(a3j)
+  deallocate(a3jArr)
 contains
   !Eq. (29) Notes
   subroutine deltaB1(l1,l2a,l3a,l2b,l3b,Cll,CLpp,lmax,DB)
@@ -383,16 +387,15 @@ contains
     el(3,6) = l1
   end subroutine assignElls
 
-  ! subroutine calcWigners2D(l1,lmin,lmax,a3jArr)
-  !   integer, intent (in) :: l1, lmax,lmin
-  !   integer ::  l2,min_l
-  !   real(dl), pointer :: a3jArr(:,:)
-  !   do l2 = lmin,lmax
-  !      !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
-  !      call GetThreeJs(a3jArr(l2,abs(l2-l1)),l1,l2,0,0)
-  !   a3jArr = a3jArr + transpose(a3jArr)
-  !   end do
-  ! end subroutine calcWigners2D
+!!$  subroutine calcWigners2D(l1,lmin,lmax)
+!!$    integer, intent (in) :: l1, lmax,lmin
+!!$    integer ::  l2, l3,min_l
+!!$    !real(dl), intent(out) :: a3jArr(,:,)
+!!$    do l2 = lmin,lmax
+!!$       call GetThreeJs(a3jArr(abs(l2-l1),l2),l1,l2,0,0)
+!!$       !a3jArr = a3jArr + transpose(a3jArr)
+!!$    end do
+!!$  end subroutine calcWigners2D
 
 
   real(dl) function floc(l1,l2,l3)
@@ -407,23 +410,7 @@ contains
     floc = floc*amp
   end function floc
 
-  subroutine calcWigners2D(l1,lmin,lmax,a3jArr)
-   integer, intent (in) :: l1, lmax,lmin
-   integer ::  l2, l3,min_l
-   real(dl) :: a3jArr(2*lmax,2*lmax)
-   do l2 = lmin,lmax
-      min_l = max(abs(l1-l2),l2)
-      !below only relevant if there would be another Wigner3J.
-      if (mod(l1+l2+min_l,2)/=0) then
-         min_l = min_l+1 !l3 should only lead to parity even numbers
-      end if
-      max_l = min(lmax,l1+l2)
-      !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
-      call GetThreeJs(a3jArr(abs(l2-l1),l2),l1,l2,0,0)
 
-      a3jArr = a3jArr + transpose(a3jArr)
-   end do
- end subroutine calcWigners2D
 
   real function prefactor(l1,l2,l3)
     integer, intent(in) :: l1,l2,l3
