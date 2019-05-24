@@ -24,6 +24,9 @@ program bisvar
 
   real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss,TotSumNGaussBD4
   real(dl) :: sigsq, fnl
+
+  logical :: daanWiger
+  logical :: doAllTerms
   !call fwig_temp_init(2*1000)
 
   lmax = 5000
@@ -78,8 +81,8 @@ program bisvar
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 50
-  lmin = 2
+  lmax = 1150
+  lmin = 1000
   DB = 0.d0
   SumDB(1:4,1:36) = 0.d0
   Sumtot = 0.d0
@@ -89,6 +92,10 @@ program bisvar
   TotSumGauss = 0.d0
   TotSumNGauss = 0.d0
   TotSumNGaussBD4 = 0.d0
+
+  daanWiger = .True.
+  doAllTerms = .True.
+
   !open(unit=12,file='SNratio_v1.3.txt', status = 'replace')
   call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
@@ -105,17 +112,29 @@ program bisvar
       write(*,*) l1
      endif
      do l2 = lmin, lmax
-      !call GetThreeJs(a3j(l2,abs(l2-l1)),l1,l2,0,0)
-      call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
-      a3j(l2,1:2*lmax) = atj(1:2*lmax)
+      !!call GetThreeJs(a3j(l2,abs(l2-l1)),l1,l2,0,0)           
+      if (daanWiger) then
+        min_l = max(abs(l1-l2),lmin)  
+        if (mod(l1+l2+min_l,2)/=0) then
+            min_l = min_l+1 !l3 should only lead to parity even numbers
+         end if
+         max_l = min(lmax,l1+l2)
+         !call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+         do l3=min_l,max_l, 2 !sum has to be even
+            a3j(l2,l3) = wigner3jm0(l1,l2,l3)
+         enddo
+      else
+        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+        a3j(l2,1:2*lmax) = atj(1:2*lmax)
+      endif
      enddo
      !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
         !call calcWigners2D(l1,lmin,lmax,a3j)
     do l2 =  lmin, lmax
-        if (mod(l2,10) .eq. 0) then
-          write(*,*) l1,l2
-        endif
-       min_l = max(abs(l1-l2),l2)
+        ! if (mod(l2,10) .eq. 0) then
+        !   write(*,*) l1,l2
+        ! endif
+       min_l = max(abs(l1-l2),lmin)
        !below only relevant if there would be another Wigner3J. 
        if (mod(l1+l2+min_l,2)/=0) then
           min_l = min_l+1 !l3 should only lead to parity even numbers
@@ -127,7 +146,7 @@ program bisvar
 
         l1b=l1
         do l2b =  lmin,lmax!max(lmin,l1b), lmax
-         min_lb= max(abs(l1b-l2b),l2b)
+         min_lb= max(abs(l1b-l2b),lmin)
          !below only relevant if there would be another Wigner3J. 
          if (mod(l1b+l2b+min_lb,2)/=0) then
             min_lb = min_lb+1 !l3 should only lead to parity even numbers
@@ -148,18 +167,25 @@ program bisvar
             !       n = n + 1
             !    enddo
             ! enddo
+            ! call deltaB4DaanWig(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,1))
+            ! call deltaB4DaanWig(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,2))
+            ! call deltaB4DaanWig(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,3))
+            ! call deltaB4DaanWig(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(4,4))
+
             call deltaB4Will(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,1))
             call deltaB4Will(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,2))
             call deltaB4Will(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,3))
             call deltaB4Will(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,4))
-            call deltaB1(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l3),pClpp,5000,DB(1,1)) 
-            call deltaB1(l1,l2b,l3b,l2,l3,Cll(1,l1),Cll(1,l2b),Cll(1,l3b),pClpp,5000,DB(1,2)) 
-            call deltaB2(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l3),pClpp,5000,DB(2,1)) 
-            call deltaB2(l1,l2b,l3b,l2,l3,Cll(1,l1),Cll(1,l2b),Cll(1,l3b),pClpp,5000,DB(2,2)) 
-            call deltaB3(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(3,1)) 
-            call deltaB3(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l3b),pClpp,5000,DB(3,2)) 
-            call deltaB3(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2b),Cll(1,l3),pClpp,5000,DB(3,3)) 
-            call deltaB3(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l3b),Cll(1,l3),pClpp,5000,DB(3,4)) 
+            if (doAllTerms) then 
+              call deltaB1(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l3),pClpp,5000,DB(1,1)) 
+              call deltaB1(l1,l2b,l3b,l2,l3,Cll(1,l1),Cll(1,l2b),Cll(1,l3b),pClpp,5000,DB(1,2)) 
+              call deltaB2(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l3),pClpp,5000,DB(2,1)) 
+              call deltaB2(l1,l2b,l3b,l2,l3,Cll(1,l1),Cll(1,l2b),Cll(1,l3b),pClpp,5000,DB(2,2)) 
+              call deltaB3(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,5000,DB(3,1)) 
+              call deltaB3(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l3b),pClpp,5000,DB(3,2)) 
+              call deltaB3(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2b),Cll(1,l3),pClpp,5000,DB(3,3)) 
+              call deltaB3(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l3b),Cll(1,l3),pClpp,5000,DB(3,4)) 
+            endif
             !! call deltaB2(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l3),Cll(1,l2),pClpp,5000,DB(2,3)) 
             !! call deltaB2(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l3),Cll(1,l2),pClpp,5000,DB(2,4)) 
             !! call deltaB1(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l3),Cll(1,l2),pClpp,5000,DB(1,3)) 
@@ -168,14 +194,15 @@ program bisvar
             !   write(*,*) l1,l2,l3,l2b,l3b,DB
             ! endif
 
-            !signal squared (in SW limit)
+            !signal squared (in SW limit) 
             fnl = floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
-
             sigsq = fnl*floc(l1b,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
+            ! fnl = floc(l1,l2,l3)*wigner3jm0(l1,l2,l3)*prefactor(l1,l2,l3)
+            ! sigsq = fnl*floc(l1b,l2b,l3b)*wigner3jm0(l1,l2b,l3b)*prefactor(l1b,l2b,l3b)
             !sigsq = fnl**2
 
             !delta (S/N)^2 Gaussian covariance 
-            if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
+            if ((l1.eq.l1b) .and. (((l2 .eq.l2b) .and. (l3 .eq.l3b)) .or.((l2 .eq.l3b) .and. (l3 .eq.l2b)))) then
               !write(*,*),l1,l2,l3,l1b,l2b,l3b,sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3),atj(l3),atj2(l3b)
               DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
             else
@@ -378,6 +405,21 @@ contains
 
   end subroutine deltaB4Will
 
+  subroutine deltaB4DaanWig(l1,l2a,l3a,l2b,l3b,Cll1,Cll2,Cll3,clpp,lmax,DB)
+    integer, intent(in) :: l1,l2a,l3a,l2b,l3b
+    integer, intent(in) :: lmax
+    real(dl), intent(in) :: Cll1,Cll2,Cll3
+    real(dl), pointer :: clpp(:,:)
+    real(dl), intent(out) :: DB
+    if  (mod(l1+l2a+l3a,2)/=0 .or. mod(l1+l2b+l3b,2)/=0) then
+       DB = 0.d0
+    else
+       DB = clpp(1,l1)*wigner3jm0(l1,l2a,l3a)*wigner3jm0(l1,l3b,l2b)*FcM(l3a,l1,l2a)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*Cll1*Cll2*Cll3
+       !*Cll(l1)*Cll(l2a)*Cll(l2b)
+    endif
+
+  end subroutine deltaB4DaanWig
+
   ! !Eq. (35) Notes
   ! subroutine deltaB4p(l1,l2a,l3a,l2b,l3b,a3j,Cll,CLpp,lmax,DB)
   !   integer, intent(in) :: l1,l2a,l3a,l2b,l3b
@@ -476,6 +518,37 @@ contains
     prefactor = 2.0*sqrt((1./4.)*((2.*l1+1.)*(2.*l2+1.)*(2.*l3+1.))/pi)
   end function prefactor
   
+  real(dl) function wigner3jm0(l1,l2,l3)
+   integer, intent (in) :: l1,l2,l3
+   integer :: LtX, LtY, LtZ, Lt
+   LtX = -l1+l2+l3
+   LtY = l1-l2+l3
+   LtZ = l1+l2-l3
+   Lt  = l1+l2+l3
+   if(mod(Lt,2)/=0) then
+      wigner3jm0  = 0.d0
+   else
+      wigner3jm0 = (-1)**(lt/2) *et(Lt)*rmj(Lt/2)/(rmj(LtX/2)*rmj(LtY/2)*rmj(LtZ/2)) * &
+           sqrt(rmj(LtX)*rmj(LtY)*rmj(LtZ)/rmj(Lt+1))
+   endif
+  end function wigner3jm0
+
+  real(dl) function rmj(x)
+   integer :: x
+   rmj = Sqrt(pi)*(((8.*x + 4.)*x + 1)*x + 1/30.)**(1./6.)
+
+  end function rmj
+
+  real(dl) function et(L)
+   integer :: L
+   real(dl) :: temp
+   real(dl), parameter :: Euler = 2.7182818284590452353602874713526624977572470937000
+   temp = L*Log(L/(L+1.))-Log(L+1.)
+   et  = sqrt(Euler)*Exp(temp/2.)
+  end function et
+
+
+
   subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
     !Recursive evaluation of 3j symbols. Does minimal error checking on input
     !parameters.
