@@ -9,12 +9,13 @@ program bisvar
   character(80) :: Folder1, Folder2, Folder3
   character(80) :: Clfile, Cllfile
 
-  real(dl), allocatable :: Cl(:,:), Cll(:,:)
+  real(dl), pointer :: Cl(:,:), Cll(:,:)
   real(dl), pointer :: pClpp(:,:)
   !integer :: l1, l2, l3
   integer :: lmax, lmin, l1, l2, l3, l1b, l2b, l3b, el(3,6), elb(3,6)
   integer :: min_l, max_l, Lm,min_lb, max_lb
-  integer :: i,j, k, l, m, n 
+  integer :: i,j, k, l, m, n
+  integer :: deltaL = 4
   !wigner 3j
   real(dl)  :: atj(0:20000),atj2(0:20000)
   real(dl), pointer :: a3j(:,:)
@@ -78,8 +79,8 @@ program bisvar
 
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
-  lmax = 150
-  lmin = 10
+  lmax = 200
+  lmin = 2
   DB = 0.d0
   SumDB(1:4,1:36) = 0.d0
   Sumtot = 0.d0
@@ -98,100 +99,101 @@ program bisvar
   !do l1 = lmin, lmax
   ! do Lm = 450,500,10
   !    lmax = Lm
-  do l1 = lmin, lmax
-     call fwig_thread_temp_init(2*lmax)
+  do l1 = lmin, lmax, deltaL
+     !call fwig_thread_temp_init(2*lmax)
      allocate(a3j(2*lmax,2*lmax))
+     a3j = 0.d0
      if (mod(l1,30) .eq. 0) then
-      write(*,*) l1
+        write(*,*) l1
      endif
-     do l2 = lmin, lmax
-      !call GetThreeJs(a3j(l2,abs(l2-l1)),l1,l2,0,0)
-      call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
-      a3j(l2,1:2*lmax) = atj(1:2*lmax)
+     !mwrite(*,*) l1
+     do l2 = lmin, lmax, deltaL
+        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+        a3j(l2,1:2*lmax) = atj(1:2*lmax)
      enddo
-     !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
-        !call calcWigners2D(l1,lmin,lmax,a3j)
-    do l2 =  lmin, lmax
-       min_l = max(abs(l1-l2),l2)
-       !below only relevant if there would be another Wigner3J. 
-       if (mod(l1+l2+min_l,2)/=0) then
-          min_l = min_l+1 !l3 should only lead to parity even numbers
-       end if
-       max_l = min(lmax,l1+l2)
-       call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
-       do l3=min_l,max_l, 2 !sum has to be even
-          !diagonal 
-        l1b=l1
-        do l2b =  lmin,lmax!max(lmin,l1b), lmax
-         min_lb= max(abs(l1b-l2b),l2b)
-         !below only relevant if there would be another Wigner3J. 
-         if (mod(l1b+l2b+min_lb,2)/=0) then
-            min_lb = min_lb+1 !l3 should only lead to parity even numbers
-         end if
-         max_lb = min(lmax,l1b+l2b)
-         call GetThreeJs(atj2(abs(l2b-l1b)),l1b,l2b,0,0)
-         do l3b=min_lb,max_lb!min_lb,max_lb, 2 !sum has to be even
-            ! l3b=l3+100
-            ! l2b=l2+100
-            ! call assignElls(el,l1,l2,l3)
-            ! call assignElls(elb,l1b,l2b,l3b)
-            !permutations (total of 36 because only 5 ell are permutable)
-            ! n = 1
-            ! do i = 1,6
-            !    do j = 1,6
-            !       !call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),Clpp(1,el(1,i)),5000,DB(4,n))
-            !       call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),pClpp,5000,DB(4,n))
-            !       n = n + 1
-            !    enddo
-            ! enddo
-            call deltaB4Will(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,1))
-            call deltaB4Will(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,2))
-            call deltaB4Will(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,3))
-            call deltaB4Will(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,4))
-                  
-            ! if ((DB(4,1) .NE. DB(4,1)) .OR. (DB(4,2) .NE. DB(4,2)) .OR. (DB(4,3) .NE. DB(4,3)) .OR. (DB(4,4) .NE. DB(4,4))) then
-            !   write(*,*) l1,l2,l3,l2b,l3b,DB
-            ! endif
 
-            !signal squared (in SW limit)
-            fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
+     
+     do l2 =  lmin, lmax, deltaL
+        min_l = max(abs(l1-l2),l2)
+        !below only relevant if there would be another Wigner3J. 
+        if (mod(l1+l2+min_l,2)/=0) then
+           min_l = min_l+deltaL !skip to next value 
+        end if
+        max_l = min(lmax,l1+l2)
+        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+        do l3=min_l,max_l, deltaL !sum has to be even
+           !diagonal 
+           l1b=l1
+           do l2b =  lmin,lmax, deltaL!max(lmin,l1b), lmax
+              min_lb= max(abs(l1b-l2b),l2b)
+              !below only relevant if there would be another Wigner3J. 
+              if (mod(l1b+l2b+min_lb,2)/=0) then
+                 min_lb = min_lb+deltaL !l3 should only lead to parity even numbers
+              end if
+              max_lb = min(lmax,l1b+l2b)
+              call GetThreeJs(atj2(abs(l2b-l1b)),l1b,l2b,0,0)
+              do l3b=min_lb,max_lb, deltaL 
+                 ! l3b=l3+100
+                 ! l2b=l2+100
+                 ! call assignElls(el,l1,l2,l3)
+                 ! call assignElls(elb,l1b,l2b,l3b)
+                 !permutations (total of 36 because only 5 ell are permutable)
+                 ! n = 1
+                 ! do i = 1,6
+                 !    do j = 1,6
+                 !       !call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),Clpp(1,el(1,i)),5000,DB(4,n))
+                 !       call deltaB4(el(1,i),el(2,i),el(3,i),elb(2,j),elb(3,j),Cll(1,el(1,i)),Cll(1,el(2,i)),Cll(1,elb(2,j)),pClpp,5000,DB(4,n))
+                 !       n = n + 1
+                 !    enddo
+                 ! enddo
+                 call deltaB4Will(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,1))
+                 call deltaB4Will(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,2))
+                 call deltaB4Will(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,3))
+                 call deltaB4Will(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,a3j,5000,DB(4,4))
 
-            sigsq = fnl*floc(l1b,l2b,l3b)*atj2(l3b)*prefactor(l1b,l2b,l3b)
-            !sigsq = fnl**2
+                 ! if ((DB(4,1) .NE. DB(4,1)) .OR. (DB(4,2) .NE. DB(4,2)) .OR. (DB(4,3) .NE. DB(4,3)) .OR. (DB(4,4) .NE. DB(4,4))) then
+                 !   write(*,*) l1,l2,l3,l2b,l3b,DB
+                 ! endif
 
-            !delta (S/N)^2 Gaussian covariance 
-            if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
-              !write(*,*),l1,l2,l3,l1b,l2b,l3b,sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3),atj(l3),atj2(l3b)
-              DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
-            else
-              DSNGauss = 0
-              SumTotGauss = SumTotGauss + 1/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)) !Sum(DBtot)
-            endif
-            !delta (S/N)^2 Non-Gaussian covariance
-            DSNonGauss = sigsq*sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
-            !endif
-            !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
-            !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
+                 !signal squared (in SW limit)
+                 fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
 
-            TotSumGauss = TotSumGauss + DSNGauss
-            TotSumNGauss = TotSumNGauss + DSNonGauss
-            !SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
-            !DB(4,1:36) = DB(4,1:36)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
-            SumTot = SumTot+ sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b)) ! sum(DB(4,1:36))
-            
-            !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
-          enddo !l3b
-        enddo !l2b
-        ! if (TotSumGauss .ne. 0) then
-        !  write(*,*) TotSumGauss, TotSumNGauss
-        ! endif
-       enddo !l3
-    enddo !l2
-    !write(*,'(I4,25E17.8)') l1, SumTot, SumDB(1:4,1:6)
-    ! write(*,*), l1,TotSumGauss,TotSumNGauss
-     call fwig_temp_free();       
+                 sigsq = fnl*floc(l1b,l2b,l3b)*atj2(l3b)*prefactor(l1b,l2b,l3b)
+                 !sigsq = fnl**2
+
+                 !delta (S/N)^2 Gaussian covariance 
+                 if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
+                    !write(*,*),l1,l2,l3,l1b,l2b,l3b,sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3),atj(l3),atj2(l3b)
+                    DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+                 else
+                    DSNGauss = 0.d0
+                    SumTotGauss = SumTotGauss + 1/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)) !Sum(DBtot)
+                 endif
+                 !delta (S/N)^2 Non-Gaussian covariance
+                 DSNonGauss = sigsq*sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b))
+                 !endif
+                 !assuming all are multiplied by Cl1Cl2Cl3 (which is true except for the last term)
+                 !write(*,*) l1, l2, l3, l2b, l3b, DB1, DB2, DB3
+
+                 TotSumGauss = TotSumGauss + DSNGauss*(deltaL)**3
+                 TotSumNGauss = TotSumNGauss + DSNonGauss*(deltaL)**3
+                 !SumDB(4,1:36) = SumDB(4,1:36) + DB(4,1:36)
+                 !DB(4,1:36) = DB(4,1:36)/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+                 SumTot = SumTot+ sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b)) ! sum(DB(4,1:36))
+
+                 !write(*,'(3I4,3E17.8)') l1,l2,l3,SumDB(1:3)
+              enddo !l3b
+           enddo !l2b
+           ! if (TotSumGauss .ne. 0) then
+           !  write(*,*) TotSumGauss, TotSumNGauss
+           ! endif
+        enddo !l3
+     enddo !l2
+     !write(*,'(I4,25E17.8)') l1, SumTot, SumDB(1:4,1:6)
+     ! write(*,*), l1,TotSumGauss,TotSumNGauss
+     !call fwig_temp_free();       
      deallocate(a3j) 
-     enddo !l1
+  enddo !l1
   !$OMP END PARAllEl DO
   write(12,'(I4,3E17.8)') Lm, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0)
   write(*,'(I4,6E17.8)') Lm, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0), SumTot, SumTotGauss
@@ -199,7 +201,7 @@ program bisvar
 
 
   close(12)
-  call fwig_table_free();
+  !call fwig_table_free();
   deallocate(Cl, Cll, pClpp)
 
 contains
@@ -447,7 +449,7 @@ contains
 
     prefactor = 2.0*sqrt((1./4.)*((2.*l1+1.)*(2.*l2+1.)*(2.*l3+1.))/pi)
   end function prefactor
-  
+
   subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
     !Recursive evaluation of 3j symbols. Does minimal error checking on input
     !parameters.
