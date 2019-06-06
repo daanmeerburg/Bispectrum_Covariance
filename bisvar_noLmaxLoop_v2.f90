@@ -24,6 +24,7 @@ program bisvar
   real(dl) :: DB(4,4), SumDB(4,4), SumTot, DBtot(4,4),SumTotGauss
 
   real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss,TotSumNGaussBD4,DSNonGaussP
+  real(dl) :: SumNGauss, SumGauss, TotNoise
   real(dl) :: sigsq, fnl
 
   logical :: daanWiger
@@ -31,9 +32,30 @@ program bisvar
 
   real(dl) :: temp
   integer :: testl = 70
+  integer :: ellar(256)
+  real(dl):: dellar(256)  !multiples of 32
+  integer :: intmax
+
+  do i  = 1, 256
+     if (i .le. 19) then
+        ellar(i) = i+1
+        dellar(i) = 1.d0
+     elseif (i .le. 75 .and. i .ge. 20) then 
+        ellar(i) = ellar(i-1) + 2
+        dellar(i) = 2.d0
+     elseif (i .le. 257 .and. i .ge. 76) then
+        ellar(i)  = ellar(i-1) + 20
+        dellar(i) = 20.d0
+     endif
+     !write(*,*) 'ell:', ellar(i)
+  enddo
+  
+  
+        
   !call fwig_temp_init(2*1000)
 
   lmax = 5000
+  
   lmin = 2
   allocate(Cl(4,2:lmax))
   allocate(Cll(4,2:lmax))
@@ -86,7 +108,9 @@ program bisvar
   !note also that I did not seperatly apply the filter that would introduce another Wigner3j
   !(is this correct?). This would lower the number of sample points. 
 
-  lmax = 2500
+  !lmax = 1000
+  intmax = 256
+  lmax = ellar(intmax)
   lmin = 2
 
   DB = 0.d0
@@ -99,41 +123,41 @@ program bisvar
   TotSumGauss = 0.d0
   TotSumNGauss = 0.d0
   TotSumNGaussBD4 = 0.d0
+  SumGauss = 0.d0
+  SumNGauss = 0.d0
+  TotNoise = 0.d0
 
   daanWiger = .True.
   doAllTerms = .False.
 
-  open(unit=12,file='lmax2500_deltal1_20_deltal2_20_deltal2p_2.txt', status = 'replace')
-  call fwig_table_init(2*lmax+2,9)
+  !open(unit=12,file='lmax1000_deltal1_100_deltal2_5_deltal2p_20_v2.txt', status = 'replace')
+  open(unit=12,file='ellarmax_256_l1_l2_l2p_v3.txt', status = 'replace')
+  !call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-  !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,a3joC,atj2,i,j,k,l,m,n, el, elb,temp), &
+  !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,i,j,k,l,m,n, el, elb,temp), &
   !$OMP PRIVATE(DSNGauss,DSNonGauss,DSNonGaussP,sigsq,fnl,atj),&
-  !$OMP REDUCTION(+:TotSumNGauss,TotSumGauss,SumTotGauss,TotSumNGaussBD4)
+  !$OMP REDUCTION(+:TotSumNGauss,TotSumGauss,SumTotGauss,TotSumNGaussBD4, SumGauss, SumNGauss, TotNoise)
   !do l1 = lmin, lmax
   ! do Lm = 450,500,10
   !    lmax = Lm
-  do l1 = lmin, lmax, 20
+  !do l1 = lmin, lmax, 100
+  do i = 1, intmax !multiples of 32
+     l1 = ellar(i)
+     write(*,*) 'l1:', l1
      TotSumGauss = 0.d0
      TotSumNGauss = 0.d0
      TotSumNGaussBD4 = 0.d0
      !call fwig_thread_temp_init(2*lmax)
      allocate(a3j(2*lmax,2*lmax))
-     !allocate(a3joC(2*lmax,2*lmax))
 
-     if (mod(l1,10) .eq. 0) then
-     !   write(*,*) l1
-     endif
      do l2 = lmin, lmax
-        !!call GetThreeJs(a3j(l2,abs(l2-l1)),l1,l2,0,0)           
         if (daanWiger) then
            min_l = max(abs(l1-l2),lmin)  
            if (mod(l1+l2+min_l,2)/=0) then
               min_l = min_l+1 !l3 should only lead to parity even numbers
            end if
            max_l = min(lmax,l1+l2)
-           !call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
            do l3=min_l,max_l, deltaL !sum has to be even
-              !a3joC(l2,l3) = wigner3jm0(l1,l2,l3)/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3))
               a3j(l2,l3) = wigner3jm0(l1,l2,l3)
            enddo
         else
@@ -141,9 +165,9 @@ program bisvar
            a3j(l2,1:2*lmax) = atj(1:2*lmax)
         endif
      enddo
-     !call GetThreeJs(a3j(abs(l2-l1)),l1,l2,0,0)
-     !call calcWigners2D(l1,lmin,lmax,a3j)
-     do l2 =  lmin, lmax, 20
+     do j = 1, intmax !l2 loop
+     !do j = i, intmax   
+        l2 = ellar(j)
         min_l = max(abs(l1-l2),lmin)
         !below only relevant if there would be another Wigner3J. 
         if (mod(l1+l2+min_l,2)/=0) then
@@ -154,42 +178,50 @@ program bisvar
            !diagonal 
            
            l1b=l1
-           do l2b =  lmin,lmax, 2!max(lmin,l1b), lmax
+           !do l2b =  lmin,lmax, 20!max(lmin,l1b), lmax
+           do k = 1, intmax !l2b
+           !do k = i, intmax
+              l2b = ellar(k)
               min_lb= max(abs(l1b-l2b),lmin)
               !below only relevant if there would be another Wigner3J. 
               if (mod(l1b+l2b+min_lb,2)/=0) then
                  min_lb = min_lb+1 !l3 should only lead to parity even numbers
               end if
               max_lb = min(lmax,l1b+l2b)
-              do l3b=min_lb,max_lb, 2!min_lb,max_lb, 2 !sum has to be even
-                 !temp = a3j(l2,l3)*a3j(l2b,l3b)
-                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*Cll(1,l1)*Cll(1,l3)*Cll(1,l2b)
-                 DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)*Cll(1,l1)*Cll(1,l3)*Cll(1,l2b)
+              do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
+
+                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+                 !DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0) !*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+                 DB(4,3) = DB(4,2) !I checked this, and this seems to be true
+                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
 
                  !signal squared (in SW limit) 
                  fnl = floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
                  sigsq = fnl*floc(l1b,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
 
-                 !delta (S/N)^2 Gaussian covariance 
+                 !delta (N)^2 
+                 DSNonGauss = sigsq*sum(DB(4,1:4))/(Cll(1,l3)*Cll(1,l1b)*Cll(1,l3b))*dellar(i)**2*dellar(j)*dellar(k)!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                 
                  if ((l1.eq.l1b) .and. (((l2 .eq.l2b) .and. (l3 .eq.l3b)) .or.((l2 .eq.l3b) .and. (l3 .eq.l2b)))) then
-                    !write(*,*),l1,l2,l3,l1b,l2b,l3b,sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3),atj(l3),atj2(l3b)
-                    DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3) !/tr(l1,l2,l3)
+                    !<S>
+                    DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)*dellar(i)*dellar(j) !/tr(l1,l2,l3)
+                    !<N^2> + delta <N^2>
+                    TotNoise = TotNoise + DSNGauss + DSNonGauss
+                    TotSumGauss = TotSumGauss + DSNGauss
+                    TotSumNGauss = TotSumNGauss + DSNGauss + DSNonGauss
+                    
                  else
                     DSNGauss = 0.d0
-                    !SumTotGauss = SumTotGauss + 1/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)) !Sum(DBtot)
+                    !<N^2> + delta <N^2>
+                    TotNoise = TotNoise + DSNonGauss
+                    TotSumGauss = TotSumGauss + DSNGauss
+                    TotSumNGauss = TotSumNGauss + DSNonGauss
                  endif
-                 !delta (S/N)^2 Non-Gaussian covariance
-                 DSNonGauss = sigsq*sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b)) !/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
-                 TotSumNGaussBD4 = TotSumNGaussBD4 + DSNonGauss!*deltaL3 + (DSNonGaussP+DSNonGauss)*deltaL3/2.
-                 !DSNonGauss = sigsq*sum(DB(4,1:4))/(Cll(1,l1)*Cll(1,l2)*Cll(1,l3)*Cll(1,l1b)*Cll(1,l2b)*Cll(1,l3b)) !/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
-                 !if (l3 .eq. 70) write(*,*) l3
-                 TotSumNGaussBD4 = TotSumNGaussBD4 + DSNonGauss
-                 TotSumNGauss = TotSumNGauss + DSNonGauss
-                 TotSumGauss = TotSumGauss + DSNGauss
-                 !if(l1 .eq. testl .and. l2 .eq. 100 .and. l2b .eq. testl .and. l3 .eq. testl) write(12,'(2I4,2E17.8)') l3, l3b, DSNonGauss, DSNGauss
-
+                 !delta (N)^2 Non-Gaussian covariance                 
+                 SumGauss = SumGauss + DSNGauss
+                 SumNGauss =  SumNGauss + DSNonGauss
+                 
               enddo !l3b
            enddo !l2b
 
@@ -198,16 +230,13 @@ program bisvar
      call fwig_temp_free();       
      deallocate(a3j)
      write(12,'(I4,2E18.7)') l1, TotSumNGauss, TotSumGauss
-     !write(*,*) l1, DSNonGauss, DSNGauss
   enddo !l1
   !$OMP END PARAllEl DO
 
-  !write(*,'(I4,8E17.8)') lmax, TotSumGauss**(1.d0/2.d0),TotSumNGauss**(1.d0/2.d0), (TotSumNGauss/TotSumGauss)**(1.d0/2.d0), (TotSumNGaussBD4/TotSumGauss)**(1.d0/2.d0), (TotSumNGaussBD4/TotSumNGauss)**(1.d0/2.d0), SumTot, SumTotGauss
-  write(*,'(I4,4E17.8)') lmax, TotSumGauss,TotSumNGauss, sqrt(TotSumNGauss/TotSumGauss),sqrt(TotSumNGaussBD4/TotSumGauss)
+  write(*,'(I4,4E17.8)') ellar(intmax), SumGauss, TotNoise, sqrt(SumGauss/TotNoise)
 
 
   close(12)
-  !call fwig_table_free();
   deallocate(Cl, Cll, pClpp)
 
 contains
