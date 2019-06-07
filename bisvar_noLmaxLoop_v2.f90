@@ -32,24 +32,36 @@ program bisvar
 
   real(dl) :: temp
   integer :: testl = 70
-  integer :: ellar(256)
-  real(dl):: dellar(256)  !multiples of 32
+  integer :: ellar(512)
+  real(dl):: dellar(512)  !multiples of 32
   integer :: intmax
 
-  do i  = 1, 256
+!!$  do i  = 1, 256
+!!$     if (i .le. 19) then
+!!$        ellar(i) = i+1
+!!$        dellar(i) = 1.d0
+!!$     elseif (i .le. 75 .and. i .ge. 20) then 
+!!$        ellar(i) = ellar(i-1) + 2
+!!$        dellar(i) = 2.d0
+!!$     elseif (i .le. 257 .and. i .ge. 76) then
+!!$        ellar(i)  = ellar(i-1) + 20
+!!$        dellar(i) = 20.d0
+!!$     endif
+!!$     !write(*,*) 'ell:', ellar(i)
+!!$  enddo
+  do i  = 1, 512
      if (i .le. 19) then
         ellar(i) = i+1
         dellar(i) = 1.d0
-     elseif (i .le. 75 .and. i .ge. 20) then 
+     elseif (i .le. 512 .and. i .ge. 20) then 
         ellar(i) = ellar(i-1) + 2
         dellar(i) = 2.d0
-     elseif (i .le. 257 .and. i .ge. 76) then
-        ellar(i)  = ellar(i-1) + 20
-        dellar(i) = 20.d0
+     !elseif (i .le. 257 .and. i .ge. 76) then
+     !   ellar(i)  = ellar(i-1) + 10
+     !   dellar(i) = 10.d0
      endif
      !write(*,*) 'ell:', ellar(i)
   enddo
-  
   
         
   !call fwig_temp_init(2*1000)
@@ -109,7 +121,7 @@ program bisvar
   !(is this correct?). This would lower the number of sample points. 
 
   !lmax = 1000
-  intmax = 256
+  intmax = 285
   lmax = ellar(intmax)
   lmin = 2
 
@@ -131,7 +143,7 @@ program bisvar
   doAllTerms = .False.
 
   !open(unit=12,file='lmax1000_deltal1_100_deltal2_5_deltal2p_20_v2.txt', status = 'replace')
-  open(unit=12,file='ellarmax_256_l1_l2_l2p_v3.txt', status = 'replace')
+  open(unit=12,file='ellarmax_160_l1_l2_l2p_v5.txt', status = 'replace')
   !call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,i,j,k,l,m,n, el, elb,temp), &
@@ -201,11 +213,11 @@ program bisvar
                  sigsq = fnl*floc(l1b,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
 
                  !delta (N)^2 
-                 DSNonGauss = sigsq*sum(DB(4,1:4))/(Cll(1,l3)*Cll(1,l1b)*Cll(1,l3b))*dellar(i)**2*dellar(j)*dellar(k)!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                 DSNonGauss = 9.d0*sigsq*sum(DB(4,1:4))/(Cll(1,l3)*Cll(1,l1b)*Cll(1,l3b))*dellar(i)*dellar(j)*dellar(k)!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
                  
-                 if ((l1.eq.l1b) .and. (((l2 .eq.l2b) .and. (l3 .eq.l3b)) .or.((l2 .eq.l3b) .and. (l3 .eq.l2b)))) then
+                 if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
                     !<S>
-                    DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)*dellar(i)*dellar(j) !/tr(l1,l2,l3)
+                    DSNGauss = 6.d0*sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)*dellar(i)*dellar(j) !/tr(l1,l2,l3)
                     !<N^2> + delta <N^2>
                     TotNoise = TotNoise + DSNGauss + DSNonGauss
                     TotSumGauss = TotSumGauss + DSNGauss
