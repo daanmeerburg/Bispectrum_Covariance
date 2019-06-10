@@ -49,21 +49,27 @@ program bisvar
 !!$     endif
 !!$     !write(*,*) 'ell:', ellar(i)
 !!$  enddo
-  do i  = 1, 512
-     if (i .le. 19) then
+  do i  = 1, 256
+     if (i .le. 47) then
         ellar(i) = i+1
         dellar(i) = 1.d0
-     elseif (i .le. 512 .and. i .ge. 20) then 
-        ellar(i) = ellar(i-1) + 2
-        dellar(i) = 2.d0
-     !elseif (i .le. 257 .and. i .ge. 76) then
-     !   ellar(i)  = ellar(i-1) + 10
-     !   dellar(i) = 10.d0
+     elseif (i .le. 85 .and. i .ge. 48) then 
+        ellar(i) = ellar(i-1) + 4
+        dellar(i) = 4.d0
+     elseif (i .le. 110 .and. i .ge. 86) then
+        ellar(i)  = ellar(i-1) + 12
+        dellar(i) = 12.d0
+     elseif (i .le. 175 .and. i .ge. 111) then
+        ellar(i)  = ellar(i-1) + 24
+        dellar(i) = 24.d0
+     else
+        ellar(i)  = ellar(i-1) + 50
+        dellar(i) = 50.d0
      endif
-     !write(*,*) 'ell:', ellar(i)
+     write(*,*) 'ell:', ellar(i)
   enddo
-  
-        
+  !stop
+  !∆`=  1  for`≤50,  ∆`=  4  for50< `≤200,  ∆`=  12  for  200< `≤500,  ∆`=  24for 500< `≤2000,  and finally ∆`= 40 for` >2000       
   !call fwig_temp_init(2*1000)
 
   lmax = 5000
@@ -121,7 +127,7 @@ program bisvar
   !(is this correct?). This would lower the number of sample points. 
 
   !lmax = 1000
-  intmax = 285
+  intmax = 224
   lmax = ellar(intmax)
   lmin = 2
 
@@ -143,7 +149,7 @@ program bisvar
   doAllTerms = .False.
 
   !open(unit=12,file='lmax1000_deltal1_100_deltal2_5_deltal2p_20_v2.txt', status = 'replace')
-  open(unit=12,file='ellarmax_160_l1_l2_l2p_v5.txt', status = 'replace')
+  open(unit=12,file='ellarmax_128_l1_l2_l2p_x1.txt', status = 'replace')
   !call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,i,j,k,l,m,n, el, elb,temp), &
