@@ -25,7 +25,11 @@ program bisvar
 
   real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss,TotSumNGaussBD4,DSNonGaussP
   real(dl) :: SumNGauss, SumGauss, TotNoise
-  real(dl) :: sigsq, fnl
+  real(dl) :: sigsq, fnl, fnlISW, fnlISWb
+
+  real(dl) :: Det,TempCovCV,TotSumCV,DetISWLens,TotSumCVISWLens,DetLensCross,TotSumCVLensCross
+  real(dl) :: DetFishCV, DefnlMarCV
+  real(dl) :: alpha, beta, tempfac
 
   logical :: daanWiger
   logical :: doAllTerms
@@ -35,6 +39,10 @@ program bisvar
   integer :: ellar(512)
   real(dl):: dellar(512)  !multiples of 32
   integer :: intmax
+  logical :: want_ISW_correction = .false. 
+
+  !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
+  want_ISW_correction = .true. 
 
 !!$  do i  = 1, 256
 !!$     if (i .le. 19) then
@@ -66,14 +74,14 @@ program bisvar
         ellar(i)  = ellar(i-1) + 50
         dellar(i) = 50.d0
      endif
-     write(*,*) 'ell:', ellar(i)
+     !write(*,*) 'ell:', ellar(i)
   enddo
   !stop
   !∆`=  1  for`≤50,  ∆`=  4  for50< `≤200,  ∆`=  12  for  200< `≤500,  ∆`=  24for 500< `≤2000,  and finally ∆`= 40 for` >2000       
   !call fwig_temp_init(2*1000)
 
   lmax = 5000
-  
+
   lmin = 2
   allocate(Cl(4,2:lmax))
   allocate(Cll(4,2:lmax))
@@ -127,9 +135,12 @@ program bisvar
   !(is this correct?). This would lower the number of sample points. 
 
   !lmax = 1000
-  intmax = 224
+  intmax = 196
   lmax = ellar(intmax)
   lmin = 2
+
+  write(*,*) 'lmin:', lmin
+  write(*,*) 'lmax:', lmax
 
   DB = 0.d0
   SumDB(1:4,1:4) = 0.d0
@@ -148,12 +159,73 @@ program bisvar
   daanWiger = .True.
   doAllTerms = .False.
 
+  TotSumCV = 0.d0
+  TotSumCVISWLens = 0.d0
+  TotSumCVLensCross = 0.d0
+
+  if(want_ISW_correction) then   
+  
+  !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
+  !$OMP PRIVATE(l1,l2,l3, min_l,max_l), &
+  !$OMP PRIVATE(i,Det,TempCovCV,atj) &
+  !$OMP PRIVATE(DetISWLens,DetLensCross,fnlISW,fnl) &
+  !$OMP REDUCTION(+:TotSumCV,TotSumCVISWLens,TotSumCVLensCross) 
+
+  do l1 = lmin, lmax
+
+     do l2 =  max(lmin,l1), lmax
+        min_l = max(abs(l1-l2),l2)
+        if (mod(l1+l2+min_l,2)/=0) then
+           min_l = min_l+1 !l3 should only lead to parity even numbers
+        end if
+        max_l = min(lmax,l1+l2)
+        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+
+        do l3=min_l,max_l, 2 !sum has to be even
+
+           !signal squared (in SW limit) 
+           fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
+           Det = fnl*fnl
+           !auto primordial 
+           TempCovCV = 1.d0/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+
+           !fnl auto 
+           TotSumCV = TotSumCV + Det*TempCovCV/tr(l1,l2,l3)
+
+           fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
+                fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
+           DetISWLens = fnlISW*fnlISW*atj(l3)**2*prefactor(l1,l2,l3)**2 
+           !auto lensing
+           TotSumCVISWLens = TotSumCVISWLens + DetISWLens*TempCovCV/tr(l1,l2,l3)
+
+           !ISW-lensing x primordial and ISW-reinization x primordial (any shape)
+           DetLensCross =fnlISW*fnl*atj(l3)*prefactor(l1,l2,l3)
+
+           TotSumCVLensCross = TotSumCVLensCross + DetLensCross*TempCovCV/tr(l1,l2,l3)                             
+
+        enddo !l3 loop
+     enddo !l2 loop
+
+  enddo !L1 loop
+  !$OMP END PARAllEl DO
+
+
+  DetFishCV = TotSumCVISWLens*TotSumCV -TotSumCVLensCross**2
+  alpha = TotSumCVISWLens/DetFishCV !C/det
+  beta = -TotSumCVLensCross/DetFishCV !A/det 
+
+  !write(*,*) DetFishCV, DefnlMarCV
+  write(*,*) 'lensing-ISW-fnl_local correlation coefficient:', TotSumCVLensCross/TotSumCV**(1./2)/TotSumCVISWLens**(1./2)
+  write(*,*) 'alpha', alpha, 'beta', beta
+  endif 
+  !stop 
+  
   !open(unit=12,file='lmax1000_deltal1_100_deltal2_5_deltal2p_20_v2.txt', status = 'replace')
-  open(unit=12,file='ellarmax_128_l1_l2_l2p_x1.txt', status = 'replace')
+  open(unit=12,file='ellarmax_128_l1_l2_l2p_x2.txt', status = 'replace')
   !call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,i,j,k,l,m,n, el, elb,temp), &
-  !$OMP PRIVATE(DSNGauss,DSNonGauss,DSNonGaussP,sigsq,fnl,atj),&
+  !$OMP PRIVATE(DSNGauss,DSNonGauss,DSNonGaussP,sigsq,fnl,fnlISW,fnlISWb,atj,tempfac),&
   !$OMP REDUCTION(+:TotSumNGauss,TotSumGauss,SumTotGauss,TotSumNGaussBD4, SumGauss, SumNGauss, TotNoise)
   !do l1 = lmin, lmax
   ! do Lm = 450,500,10
@@ -184,7 +256,7 @@ program bisvar
         endif
      enddo
      do j = 1, intmax !l2 loop
-     !do j = i, intmax   
+        !do j = i, intmax   
         l2 = ellar(j)
         min_l = max(abs(l1-l2),lmin)
         !below only relevant if there would be another Wigner3J. 
@@ -194,11 +266,11 @@ program bisvar
         max_l = min(lmax,l1+l2)
         do l3=min_l,max_l, 2 !sum has to be even
            !diagonal 
-           
+
            l1b=l1
            !do l2b =  lmin,lmax, 20!max(lmin,l1b), lmax
            do k = 1, intmax !l2b
-           !do k = i, intmax
+              !do k = i, intmax
               l2b = ellar(k)
               min_lb= max(abs(l1b-l2b),lmin)
               !below only relevant if there would be another Wigner3J. 
@@ -218,9 +290,21 @@ program bisvar
                  fnl = floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
                  sigsq = fnl*floc(l1b,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
 
+                 if(want_ISW_correction) then
+                    fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
+                         fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
+                    fnlISWb = fPhiISW(l1b,l2b,l3b,pClpp(2,l2b),Cll(1,l3b)) + fPhiISW(l1b,l3b,l2b,pClpp(2,l3b),Cll(1,l2b)) + fPhiISW(l2b,l1b,l3b,pClpp(2,l2b),Cll(1,l3b)) + &
+                         fPhiISW(l3b,l2b,l1b,pClpp(2,l2b),Cll(1,l1b)) + fPhiISW(l3b,l1b,l2b,pClpp(2,l1b),Cll(1,l2b)) + fPhiISW(l2b,l3b,l1b,pClpp(2,l3b),Cll(1,l1b))
+                    tempfac = a3j(l2,l3)*prefactor(l1,l2,l3)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
+                    sigsq = tempfac*( alpha**2*floc(l1,l2,l3)*floc(l1b,l2b,l3b) &
+                         + alpha*beta*floc(l1,l2,l3)*fnlISWb + alpha*beta*floc(l1b,l2b,l3b)*fnlISW + beta**2*fnlISW*fnlISWb)
+                 endif
+
+
+
                  !delta (N)^2 
                  DSNonGauss = 9.d0*sigsq*sum(DB(4,1:4))/(Cll(1,l3)*Cll(1,l1b)*Cll(1,l3b))*dellar(i)*dellar(j)*dellar(k)!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
-                 
+
                  if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
                     !<S>
                     DSNGauss = 6.d0*sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)*dellar(i)*dellar(j) !/tr(l1,l2,l3)
@@ -228,7 +312,7 @@ program bisvar
                     TotNoise = TotNoise + DSNGauss + DSNonGauss
                     TotSumGauss = TotSumGauss + DSNGauss
                     TotSumNGauss = TotSumNGauss + DSNGauss + DSNonGauss
-                    
+
                  else
                     DSNGauss = 0.d0
                     !<N^2> + delta <N^2>
@@ -239,7 +323,7 @@ program bisvar
                  !delta (N)^2 Non-Gaussian covariance                 
                  SumGauss = SumGauss + DSNGauss
                  SumNGauss =  SumNGauss + DSNonGauss
-                 
+
               enddo !l3b
            enddo !l2b
 
@@ -568,6 +652,11 @@ contains
 
   end function tr
 
+  real(dl) function fPhiISW(l1,l2,l3,CPT_l1,CTT_l3)
+    integer :: l1, l2, l3
+    real(dl) :: CPT_l1,CTT_l3
+    fPhiISW = .5*((l1+1)*l1-l2*(l2+1.d0)+l3*(l3+1.d0))*CPT_l1*CTT_l3
+  end function fPhiISW
 
   subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
     !Recursive evaluation of 3j symbols. Does minimal error checking on input
