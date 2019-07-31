@@ -21,11 +21,11 @@ program bisvar
   real(dl), pointer :: a3j(:,:), a3joC(:,:)
 
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
-  real(dl) :: DB(4,4), SumDB(4,4), SumTot, DBtot(4,4),SumTotGauss
+  real(dl) :: DB(4,6), SumDB(4,4), SumTot, DBtot(4,4),SumTotGauss
 
   real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss,TotSumNGaussBD4,DSNonGaussP
   real(dl) :: SumNGauss, SumGauss, TotNoise
-  real(dl) :: sigsq, fnl, fnlISW, fnlISWb
+  real(dl) :: sigsq, sigsqX, fnl, fnlISW, fnlISWb
 
   real(dl) :: Det,TempCovCV,TotSumCV,DetISWLens,TotSumCVISWLens,DetLensCross,TotSumCVLensCross
   real(dl) :: DetFishCV, DefnlMarCV
@@ -42,21 +42,21 @@ program bisvar
   logical :: want_ISW_correction = .false. 
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
-  want_ISW_correction = .true. 
-
-!!$  do i  = 1, 256
-!!$     if (i .le. 19) then
-!!$        ellar(i) = i+1
-!!$        dellar(i) = 1.d0
-!!$     elseif (i .le. 75 .and. i .ge. 20) then 
-!!$        ellar(i) = ellar(i-1) + 2
-!!$        dellar(i) = 2.d0
-!!$     elseif (i .le. 257 .and. i .ge. 76) then
-!!$        ellar(i)  = ellar(i-1) + 20
-!!$        dellar(i) = 20.d0
-!!$     endif
-!!$     !write(*,*) 'ell:', ellar(i)
-!!$  enddo
+  want_ISW_correction = .false. 
+!!$
+  do i  = 1, 256
+     if (i .le. 19) then
+        ellar(i) = i+1
+        dellar(i) = 1.d0
+     elseif (i .le. 75 .and. i .ge. 20) then 
+        ellar(i) = ellar(i-1) + 2
+        dellar(i) = 2.d0
+     elseif (i .le. 257 .and. i .ge. 76) then
+        ellar(i)  = ellar(i-1) + 20
+        dellar(i) = 20.d0
+     endif
+     !write(*,*) 'ell:', ellar(i)
+  enddo
   do i  = 1, 256
      if (i .le. 47) then
         ellar(i) = i+1
@@ -76,6 +76,16 @@ program bisvar
      endif
      !write(*,*) 'ell:', ellar(i)
   enddo
+!!$  do i  = 1, 512
+!!$     if (i .le. 399) then
+!!$        ellar(i) = i + 1
+!!$        dellar(i) = 1.d0
+!!$     else
+!!$        ellar(i)  = ellar(i-1) + 2
+!!$        dellar(i) = 2.d0
+!!$     endif
+!!$     !write(*,*) 'ell:', ellar(i)
+!!$  enddo
   !stop
   !∆`=  1  for`≤50,  ∆`=  4  for50< `≤200,  ∆`=  12  for  200< `≤500,  ∆`=  24for 500< `≤2000,  and finally ∆`= 40 for` >2000       
   !call fwig_temp_init(2*1000)
@@ -90,7 +100,8 @@ program bisvar
   Folder1 = 'SOspectra/'
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
   Cllfile = trim(Folder1)//trim('SOspectra_lensedCls.dat')
-
+  !from Alex:
+  Cllfile = '../SO_forecasts/CAMB/cosmo2017_10K_acc3_lensedCls.dat'
   open(unit=17,file = Clfile, status='old')
   open(unit=18,file = Cllfile, status='old')
 
@@ -105,10 +116,10 @@ program bisvar
 
      read(17,*) l1, Cl(1:4,j),pClpp(1:3,j)
      read(18,*) l1, Cll(1:4,j)
-     Cll(1:4,j) = 2.*pi*Cll(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
-     Cl(1:4,j) = 2.*pi*Cl(1:4,j)/(real(l1,dl)*(real(l1,dl)+1.))/CMB2COBEnorm
-     pClpp(1,j) = 2.*pi*pClpp(1,j)/(real(l1,dl)*(real(l1,dl)+1.))**2
-     pClpp(2:3,j) = 2.*pi*pClpp(2:3,j)/(real(l1,dl)*(real(l1,dl)+1.))**(3.d0/2.d0)/CMB2COBEnorm**(1./2)
+     Cll(1:4,j) = 2.*pi*Cll(1:4,j)/l1/(l1+1.)/CMB2COBEnorm
+     Cl(1:4,j) = 2.*pi*Cl(1:4,j)/l1/(l1+1.)/CMB2COBEnorm
+     pClpp(1,j) = 2.*pi*pClpp(1,j)/(l1*(l1+1.))**2
+     pClpp(2:3,j) = 2.*pi*pClpp(2:3,j)/(l1*(l1+1.))**(3.d0/2.d0)/CMB2COBEnorm**(1./2)
 
      !write(*,*) l1,Cll(1:4,j) 
   enddo
@@ -135,7 +146,7 @@ program bisvar
   !(is this correct?). This would lower the number of sample points. 
 
   !lmax = 1000
-  intmax = 196
+  intmax = 192
   lmax = ellar(intmax)
   lmin = 2
 
@@ -164,73 +175,73 @@ program bisvar
   TotSumCVLensCross = 0.d0
 
   if(want_ISW_correction) then   
-  
-  !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-  !$OMP PRIVATE(l1,l2,l3, min_l,max_l), &
-  !$OMP PRIVATE(i,Det,TempCovCV,atj) &
-  !$OMP PRIVATE(DetISWLens,DetLensCross,fnlISW,fnl) &
-  !$OMP REDUCTION(+:TotSumCV,TotSumCVISWLens,TotSumCVLensCross) 
 
-  do l1 = lmin, lmax
+     !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
+     !$OMP PRIVATE(l1,l2,l3, min_l,max_l), &
+     !$OMP PRIVATE(i,Det,TempCovCV,atj) &
+     !$OMP PRIVATE(DetISWLens,DetLensCross,fnlISW,fnl) &
+     !$OMP REDUCTION(+:TotSumCV,TotSumCVISWLens,TotSumCVLensCross) 
 
-     do l2 =  max(lmin,l1), lmax
-        min_l = max(abs(l1-l2),l2)
-        if (mod(l1+l2+min_l,2)/=0) then
-           min_l = min_l+1 !l3 should only lead to parity even numbers
-        end if
-        max_l = min(lmax,l1+l2)
-        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+     do l1 = lmin, lmax
 
-        do l3=min_l,max_l, 2 !sum has to be even
+        do l2 =  max(lmin,l1), lmax
+           min_l = max(abs(l1-l2),l2)
+           if (mod(l1+l2+min_l,2)/=0) then
+              min_l = min_l+1 !l3 should only lead to parity even numbers
+           end if
+           max_l = min(lmax,l1+l2)
+           call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
 
-           !signal squared (in SW limit) 
-           fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
-           Det = fnl*fnl
-           !auto primordial 
-           TempCovCV = 1.d0/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+           do l3=min_l,max_l, 2 !sum has to be even
 
-           !fnl auto 
-           TotSumCV = TotSumCV + Det*TempCovCV/tr(l1,l2,l3)
+              !signal squared (in SW limit) 
+              fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
+              Det = fnl*fnl
+              !auto primordial 
+              TempCovCV = 1.d0/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
 
-           fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
-                fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
-           DetISWLens = fnlISW*fnlISW*atj(l3)**2*prefactor(l1,l2,l3)**2 
-           !auto lensing
-           TotSumCVISWLens = TotSumCVISWLens + DetISWLens*TempCovCV/tr(l1,l2,l3)
+              !fnl auto 
+              TotSumCV = TotSumCV + Det*TempCovCV/tr(l1,l2,l3)
 
-           !ISW-lensing x primordial and ISW-reinization x primordial (any shape)
-           DetLensCross =fnlISW*fnl*atj(l3)*prefactor(l1,l2,l3)
+              fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
+                   fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
+              DetISWLens = fnlISW*fnlISW*atj(l3)**2*prefactor(l1,l2,l3)**2 
+              !auto lensing
+              TotSumCVISWLens = TotSumCVISWLens + DetISWLens*TempCovCV/tr(l1,l2,l3)
 
-           TotSumCVLensCross = TotSumCVLensCross + DetLensCross*TempCovCV/tr(l1,l2,l3)                             
+              !ISW-lensing x primordial and ISW-reinization x primordial (any shape)
+              DetLensCross =fnlISW*fnl*atj(l3)*prefactor(l1,l2,l3)
 
-        enddo !l3 loop
-     enddo !l2 loop
+              TotSumCVLensCross = TotSumCVLensCross + DetLensCross*TempCovCV/tr(l1,l2,l3)                             
 
-  enddo !L1 loop
-  !$OMP END PARAllEl DO
+           enddo !l3 loop
+        enddo !l2 loop
+
+     enddo !L1 loop
+     !$OMP END PARAllEl DO
 
 
-  DetFishCV = TotSumCVISWLens*TotSumCV -TotSumCVLensCross**2
-  alpha = TotSumCVISWLens/DetFishCV !C/det
-  beta = -TotSumCVLensCross/DetFishCV !A/det 
+     DetFishCV = TotSumCVISWLens*TotSumCV -TotSumCVLensCross**2
+     alpha = TotSumCVISWLens/DetFishCV !C/det
+     beta = -TotSumCVLensCross/DetFishCV !A/det 
 
-  !write(*,*) DetFishCV, DefnlMarCV
-  write(*,*) 'lensing-ISW-fnl_local correlation coefficient:', TotSumCVLensCross/TotSumCV**(1./2)/TotSumCVISWLens**(1./2)
-  write(*,*) 'alpha', alpha, 'beta', beta
-  endif 
+     !write(*,*) DetFishCV, DefnlMarCV
+     write(*,*) 'lensing-ISW-fnl_local correlation coefficient:', TotSumCVLensCross/TotSumCV**(1./2)/TotSumCVISWLens**(1./2)
+     write(*,*) 'alpha', alpha, 'beta', beta
+  endif
   !stop 
-  
+  !lmax = 256
   !open(unit=12,file='lmax1000_deltal1_100_deltal2_5_deltal2p_20_v2.txt', status = 'replace')
   open(unit=12,file='ellarmax_128_l1_l2_l2p_x2.txt', status = 'replace')
+
+!!!!!PDM jul 2019
+!!!!!testing; with Fisher code I find fnl_template error of 16.658 for lmax = 500 and for 44.511 lmax = 250
+
   !call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
   !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,i,j,k,l,m,n, el, elb,temp), &
-  !$OMP PRIVATE(DSNGauss,DSNonGauss,DSNonGaussP,sigsq,fnl,fnlISW,fnlISWb,atj,tempfac),&
+  !$OMP PRIVATE(DSNGauss,DSNonGauss,DSNonGaussP,sigsq,sigsqX,fnl,fnlISW,fnlISWb,atj,atj2,tempfac),&
   !$OMP REDUCTION(+:TotSumNGauss,TotSumGauss,SumTotGauss,TotSumNGaussBD4, SumGauss, SumNGauss, TotNoise)
-  !do l1 = lmin, lmax
-  ! do Lm = 450,500,10
-  !    lmax = Lm
-  !do l1 = lmin, lmax, 100
   do i = 1, intmax !multiples of 32
      l1 = ellar(i)
      write(*,*) 'l1:', l1
@@ -247,30 +258,35 @@ program bisvar
               min_l = min_l+1 !l3 should only lead to parity even numbers
            end if
            max_l = min(lmax,l1+l2)
-           do l3=min_l,max_l, deltaL !sum has to be even
+           do l3=min_l,max_l !sum has to be even
               a3j(l2,l3) = wigner3jm0(l1,l2,l3)
            enddo
         else
            call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
            a3j(l2,1:2*lmax) = atj(1:2*lmax)
         endif
+
      enddo
+
+     !max(lmin,l1)
      do j = 1, intmax !l2 loop
         !do j = i, intmax   
         l2 = ellar(j)
         min_l = max(abs(l1-l2),lmin)
-        !below only relevant if there would be another Wigner3J. 
+        !min_l = max(abs(l1-l2),l2)
         if (mod(l1+l2+min_l,2)/=0) then
            min_l = min_l+1 !l3 should only lead to parity even numbers
         end if
         max_l = min(lmax,l1+l2)
+        !checking
+        call GetThreeJs(atj2(abs(l2-l1)),l1,l2,0,0)
         do l3=min_l,max_l, 2 !sum has to be even
            !diagonal 
-
+           !write(*,*) atj2(l3)
            l1b=l1
-           !do l2b =  lmin,lmax, 20!max(lmin,l1b), lmax
+           !l2b=l2
+           !l3b=l3
            do k = 1, intmax !l2b
-              !do k = i, intmax
               l2b = ellar(k)
               min_lb= max(abs(l1b-l2b),lmin)
               !below only relevant if there would be another Wigner3J. 
@@ -280,11 +296,18 @@ program bisvar
               max_lb = min(lmax,l1b+l2b)
               do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
 
-                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-                 !DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0) !*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-                 DB(4,3) = DB(4,2) !I checked this, and this seems to be true
-                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+!!$                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+!!$                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+!!$                 DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+!!$                 !DB(4,3) = DB(4,2) !I checked this, and this seems to be true
+!!$                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+                 !seems that I forgot a symmetry is broken in the Cl's
+                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l3b)
+                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l2)/Cll(1,l3b)
+                 DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l2b)
+                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cll(1,l2)/Cll(1,l2b)
+                 DB(4,5) = a3j(l3b,l3)*a3j(l2b,l2)*FcM(l3,l1,l3b)*FcM(l2,l1,l2b)/(2*l1+1.d0)/Cll(1,l2)/Cll(1,l3)
+                 DB(4,6) = a3j(l2,l2b)*a3j(l3,l3b)*FcM(l2b,l1,l2)*FcM(l3b,l1,l3)/(2*l1+1.d0)/Cll(1,l2b)/Cll(1,l3b)
 
                  !signal squared (in SW limit) 
                  fnl = floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
@@ -300,14 +323,16 @@ program bisvar
                          + alpha*beta*floc(l1,l2,l3)*fnlISWb + alpha*beta*floc(l1b,l2b,l3b)*fnlISW + beta**2*fnlISW*fnlISWb)
                  endif
 
-
-
                  !delta (N)^2 
-                 DSNonGauss = 9.d0*sigsq*sum(DB(4,1:4))/(Cll(1,l3)*Cll(1,l1b)*Cll(1,l3b))*dellar(i)*dellar(j)*dellar(k)!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
-
+                 !DSNonGauss = 9.d0*sigsq*sum(DB(4,1:4))/(Cll(1,l3)*Cll(1,l1b)*Cll(1,l3b))*dellar(i)*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                 !comment: pClpp(1,l1)/Cll(1,l1) comes from Clpp(l1) /Cl(l1b), but l1 = l1b
+                 DSNonGauss = 9.d0*pClpp(1,l1)/Cll(1,l1)*sigsq*sum(DB(4,1:6))*dellar(i)*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                 !l3b = l3
                  if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
-                    !<S>
-                    DSNGauss = 6.d0*sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)*dellar(i)*dellar(j) !/tr(l1,l2,l3)
+                    sigsqX = (floc(l1,l2,l3)*atj2(l3)*prefactor(l1,l2,l3))**2
+                    !write(*,*) sigsqX - sigsq
+                    !<S>  replaced Cll with Cl. Differene is too large for just being lensed versus unlensed 
+                    DSNGauss = sigsqX/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)*dellar(i)*dellar(j)/6.!tr(l1,l2,l3)
                     !<N^2> + delta <N^2>
                     TotNoise = TotNoise + DSNGauss + DSNonGauss
                     TotSumGauss = TotSumGauss + DSNGauss
@@ -320,23 +345,24 @@ program bisvar
                     TotSumGauss = TotSumGauss + DSNGauss
                     TotSumNGauss = TotSumNGauss + DSNonGauss
                  endif
-                 !delta (N)^2 Non-Gaussian covariance                 
+                 !delta (N)^2 Non-Gaussian covariance
+
                  SumGauss = SumGauss + DSNGauss
-                 SumNGauss =  SumNGauss + DSNonGauss
+                 SumNGauss =  SumNGauss + DSNGauss + DSNonGauss
 
               enddo !l3b
            enddo !l2b
 
         enddo !l3
-     enddo !l24
+     enddo !l2
      call fwig_temp_free();       
      deallocate(a3j)
      write(12,'(I4,2E18.7)') l1, TotSumNGauss, TotSumGauss
   enddo !l1
   !$OMP END PARAllEl DO
 
-  write(*,'(I4,4E17.8)') ellar(intmax), SumGauss, TotNoise, sqrt(SumGauss/TotNoise)
-
+  write(*,'(I4,4E17.8)') ellar(intmax), SumGauss, SumNGauss, sqrt(SumGauss/SumNGauss)
+  write(*,'(A12,X,I4,X,A19,X,F11.3)') 'For lmax = ',  ellar(intmax), 'the error on fnl = ', sqrt(1./SumGauss)
 
   close(12)
   deallocate(Cl, Cll, pClpp)
@@ -600,7 +626,7 @@ contains
     amp = (2.d0/27./pi**2)*As
     floc = 1.d0/(l1+1.d0)/l1/l2/(l2+1.d0) + 1.d0/(l3+1.d0)/l3/l2/(l2+1.d0) + &
          1.d0/(l1+1.d0)/l1/l3/(l3+1.d0)
-    floc = floc*amp
+    floc = floc*amp*2.E-7 !2.E-7  is introduced to get roughly same amplitude at l_max = 500 to full fnl_local
   end function floc
 
 
