@@ -13,7 +13,7 @@ program bisvar
   real(dl), pointer :: pClpp(:,:)
   !integer :: l1, l2, l3
   integer :: lmax, lmin, l1, l2, l3, l1b, l2b, l3b, el(3,6), elb(3,6)
-  integer :: min_l, max_l, Lm,min_lb, max_lb
+  integer :: min_l, max_l, Lm,min_lb, max_lb, l_min, l_max
   integer :: i,j, k, l, m, n
   integer :: deltaL = 1, deltaL3 = 4
   !wigner 3j
@@ -39,11 +39,15 @@ program bisvar
   integer :: ellar(512)
   real(dl):: dellar(512)  !multiples of 32
   integer :: intmax
-  logical :: want_ISW_correction = .false. 
+  logical :: want_ISW_correction = .false.
+
+  real(dl) ::stepsum, DBx
+  real(dl), allocatable ::  tempB3(:,:,:,:)
+  integer :: s, min_s, max_s, p, min_p, max_p
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
   want_ISW_correction = .false. 
-!!$
+
   do i  = 1, 256
      if (i .le. 19) then
         ellar(i) = i+1
@@ -88,7 +92,6 @@ program bisvar
 !!$  enddo
   !stop
   !∆`=  1  for`≤50,  ∆`=  4  for50< `≤200,  ∆`=  12  for  200< `≤500,  ∆`=  24for 500< `≤2000,  and finally ∆`= 40 for` >2000       
-  !call fwig_temp_init(2*1000)
 
   lmax = 5000
 
@@ -146,7 +149,7 @@ program bisvar
   !(is this correct?). This would lower the number of sample points. 
 
   !lmax = 1000
-  intmax = 192
+  intmax = 160
   lmax = ellar(intmax)
   lmin = 2
 
@@ -229,17 +232,72 @@ program bisvar
      write(*,*) 'lensing-ISW-fnl_local correlation coefficient:', TotSumCVLensCross/TotSumCV**(1./2)/TotSumCVISWLens**(1./2)
      write(*,*) 'alpha', alpha, 'beta', beta
   endif
-  !stop 
+  !stop
+
+!!$  allocate(tempB3(100,100,lmax,lmax))
+!!$  tempB3 = 0.d0
+!!$  do j = 1, intmax !l2 loop
+!!$     !do j = i, intmax
+!!$     !write(*,*) 
+!!$     l2 = ellar(j)
+!!$     min_l = lmin
+!!$     !min_l = max(abs(l1-l2),l2)
+!!$
+!!$     max_l = lmax
+!!$
+!!$     do l3=min_l,max_l !sum has to be even
+!!$
+!!$        do k = 1, intmax !l2b
+!!$           l2b = ellar(k)
+!!$           min_lb= lmin 
+!!$
+!!$           max_lb = lmax
+!!$           do l3b=min_lb,max_lb !min_lb,max_lb, 2 !sum has to be even
+!!$              DBx  = 0.d0
+!!$              stepsum = 0.d0
+!!$              l_min = Max(abs(l3b-l2),2)
+!!$              l_min = Max(abs(l3-l2b),l_min)
+!!$              l_max = Min(abs(l2+l3b),lmax)
+!!$              l_max = Min(abs(l3+l2b),l_max)
+!!$              !if l2a+l3b = even/odd and  l3a+l2b = odd/even -> 0 because of conflicting wignersJs
+!!$              !hence the folliwing is always sufficient 
+!!$              if (mod(l2+l3b+l_min,2)/=0) then
+!!$                 l_min = l_min+1 
+!!$              end if
+!!$              if  (mod(l2+l2b+l3+l3b,2)/=0) then
+!!$                 DBx = 0.d0
+!!$              else !otherwise do the sum 
+!!$                 do i = l_min, l_max, 2 !L
+!!$                    stepsum = 1.0*pClpp(1,i)* &
+!!$                         Fc(l3b,i,l2)*Fc(l3,i,l2b)
+!!$                    DBx = DBx + stepsum
+!!$                    !write(*,*) DB1, stepsum, Clpp(i)
+!!$                 enddo
+!!$              endif
+!!$              tempB3(j,k,l3,l3b) = (-1.d0)**(-l2-l2b)*DBx
+!!$              !write(*,*) l2, l2b, l3, l3b, tempB3(j,k,l3,l3b)
+!!$
+!!$           enddo
+!!$           
+!!$        enddo
+!!$     enddo
+!!$  enddo
+!!$  deallocate(tempB3)
+!!$  stop
+
   !lmax = 256
   !open(unit=12,file='lmax1000_deltal1_100_deltal2_5_deltal2p_20_v2.txt', status = 'replace')
-  open(unit=12,file='ellarmax_128_l1_l2_l2p_x2.txt', status = 'replace')
+  open(unit=12,file='ellarmax_128_l1_l2_l2p_x3.txt', status = 'replace')
 
 !!!!!PDM jul 2019
 !!!!!testing; with Fisher code I find fnl_template error of 16.658 for lmax = 500 and for 44.511 lmax = 250
-
-  !call fwig_table_init(2*lmax+2,9)
+  !putting these to 1 in case you run over all l3, l3'
+  s = 1
+  p = 1
+  call fwig_table_init(2*lmax+2,9)
   !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-  !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,i,j,k,l,m,n, el, elb,temp), &
+  !$OMP PRIVATE(l1,l2,l3,l1b,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,a3j,i,j,k,l,m,n,el,elb,temp), &
+  !$OMP PRIVATE(s,p,min_p,max_p,min_s,max_s), &
   !$OMP PRIVATE(DSNGauss,DSNonGauss,DSNonGaussP,sigsq,sigsqX,fnl,fnlISW,fnlISWb,atj,atj2,tempfac),&
   !$OMP REDUCTION(+:TotSumNGauss,TotSumGauss,SumTotGauss,TotSumNGaussBD4, SumGauss, SumNGauss, TotNoise)
   do i = 1, intmax !multiples of 32
@@ -248,7 +306,7 @@ program bisvar
      TotSumGauss = 0.d0
      TotSumNGauss = 0.d0
      TotSumNGaussBD4 = 0.d0
-     !call fwig_thread_temp_init(2*lmax)
+     call fwig_thread_temp_init(2*lmax)
      allocate(a3j(2*lmax,2*lmax))
 
      do l2 = lmin, lmax
@@ -268,19 +326,24 @@ program bisvar
 
      enddo
 
-     !max(lmin,l1)
      do j = 1, intmax !l2 loop
-        !do j = i, intmax   
         l2 = ellar(j)
         min_l = max(abs(l1-l2),lmin)
-        !min_l = max(abs(l1-l2),l2)
+        min_s = max(abs(i-j),1)
         if (mod(l1+l2+min_l,2)/=0) then
            min_l = min_l+1 !l3 should only lead to parity even numbers
         end if
+        if (mod(i+j+min_s,2)/=0) then
+           min_s = min_s+1 !l3 should only lead to parity even numbers
+        end if
         max_l = min(lmax,l1+l2)
+        max_s = min(intmax,i+j)
         !checking
-        call GetThreeJs(atj2(abs(l2-l1)),l1,l2,0,0)
-        do l3=min_l,max_l, 2 !sum has to be even
+        !call GetThreeJs(atj2(abs(l2-l1)),l1,l2,0,0)
+        !do l3=min_l,max_l, 2 !sum has to be even
+        do s = min_s, max_s
+          
+           l3 = ellar(s)
            !diagonal 
            !write(*,*) atj2(l3)
            l1b=l1
@@ -289,26 +352,33 @@ program bisvar
            do k = 1, intmax !l2b
               l2b = ellar(k)
               min_lb= max(abs(l1b-l2b),lmin)
+              min_p = max(abs(i-k),1)
+                      
               !below only relevant if there would be another Wigner3J. 
               if (mod(l1b+l2b+min_lb,2)/=0) then
                  min_lb = min_lb+1 !l3 should only lead to parity even numbers
               end if
+              if (mod(i+k+min_p,2)/=0) then
+                 min_p = min_p+1 !l3 should only lead to parity even numbers
+              end if
               max_lb = min(lmax,l1b+l2b)
-              do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
-
-!!$                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-!!$                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-!!$                 DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
-!!$                 !DB(4,3) = DB(4,2) !I checked this, and this seems to be true
-!!$                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*pClpp(1,l1)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)!*Cll(1,l1)*Cll(1,l2)*Cll(1,l2b)
+              max_p = min(intmax,i+k)
+              
+              !do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
+              do p = min_p, max_p
+                 l3b  = ellar(p)
                  !seems that I forgot a symmetry is broken in the Cl's
-                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l3b)
-                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l2)/Cll(1,l3b)
-                 DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l2b)
-                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cll(1,l2)/Cll(1,l2b)
-                 DB(4,5) = a3j(l3b,l3)*a3j(l2b,l2)*FcM(l3,l1,l3b)*FcM(l2,l1,l2b)/(2*l1+1.d0)/Cll(1,l2)/Cll(1,l3)
-                 DB(4,6) = a3j(l2,l2b)*a3j(l3,l3b)*FcM(l2b,l1,l2)*FcM(l3b,l1,l3)/(2*l1+1.d0)/Cll(1,l2b)/Cll(1,l3b)
+                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cl(1,l3)/Cl(1,l3b)
+                 DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cl(1,l2)/Cl(1,l3b)
+                 DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cl(1,l3)/Cl(1,l2b)
+                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cl(1,l2)/Cl(1,l2b)
 
+
+!!$                 call deltaB3(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l3),Cll(1,l3b),pClpp,lmax,DB(3,1)) 
+!!$                 call deltaB3(l1,l2,l3,l3b,l2b,Cll(1,l1),Cll(1,l3),Cll(1,l2b),pClpp,lmax,DB(3,2)) 
+!!$                 call deltaB3(l1,l3,l2,l2b,l3b,Cll(1,l1),Cll(1,l2),Cll(1,l3b),pClpp,lmax,DB(3,3)) 
+!!$                 call deltaB3(l1,l3,l2,l3b,l2b,Cll(1,l1),Cll(1,l2),Cll(1,l2b),pClpp,lmax,DB(3,4))
+                 
                  !signal squared (in SW limit) 
                  fnl = floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
                  sigsq = fnl*floc(l1b,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
@@ -324,15 +394,14 @@ program bisvar
                  endif
 
                  !delta (N)^2 
-                 !DSNonGauss = 9.d0*sigsq*sum(DB(4,1:4))/(Cll(1,l3)*Cll(1,l1b)*Cll(1,l3b))*dellar(i)*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
                  !comment: pClpp(1,l1)/Cll(1,l1) comes from Clpp(l1) /Cl(l1b), but l1 = l1b
-                 DSNonGauss = 9.d0*pClpp(1,l1)/Cll(1,l1)*sigsq*sum(DB(4,1:6))*dellar(i)*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                 DSNonGauss = 9.d0*pClpp(1,l1)/Cl(1,l1)*sigsq*sum(DB(4,1:4))*dellar(i)*dellar(j)*dellar(k)*dellar(s)*dellar(p)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
                  !l3b = l3
                  if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
-                    sigsqX = (floc(l1,l2,l3)*atj2(l3)*prefactor(l1,l2,l3))**2
+                    !sigsqX = (floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3))**2
                     !write(*,*) sigsqX - sigsq
                     !<S>  replaced Cll with Cl. Differene is too large for just being lensed versus unlensed 
-                    DSNGauss = sigsqX/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)*dellar(i)*dellar(j)/6.!tr(l1,l2,l3)
+                    DSNGauss = sigsq/Cl(1,l1)/Cl(1,l2)/Cl(1,l3)*dellar(i)*dellar(j)*dellar(s)/6.!tr(l1,l2,l3)
                     !<N^2> + delta <N^2>
                     TotNoise = TotNoise + DSNGauss + DSNonGauss
                     TotSumGauss = TotSumGauss + DSNGauss
@@ -470,11 +539,14 @@ contains
        do i = l_min, l_max, 2 !L
           stepsum = fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )*Clpp(1,i)* &
                Fc(l3b,i,l2a)*Fc(l3a,i,l2b)
+          !!if(abs(fwig6jj(2* l1 , 2* l2a , 2* l3a , 2*  i,  2*  l2b , 2*  l3b )) > 1.) write(*,*) l1,l2a,l3a,l2b,l3b
+!!$          stepsum = 1.0*Clpp(1,i)* &
+!!$               Fc(l3b,i,l2a)*Fc(l3a,i,l2b)
           DB = DB + stepsum
           !write(*,*) DB1, stepsum, Clpp(i)
        enddo
     endif
-    DB = Cll1a*Cll2a*Cll2b*(-1.d0)**(-l2a-l2b)*DB
+    DB = Cll1a/Cll2a/Cll2b*(-1.d0)**(-l2a-l2b)*DB
   end subroutine deltaB3
 
   !Eq. (35) Notes
@@ -556,7 +628,7 @@ contains
   real(dl) function Fc(l1,l2,l3)
     integer :: l1, l2, l3
     Fc = 1.d0/2.d0*(l2*(l2+1.0)+l3*(l3+1.0)-l1*(l1+1.0))* &
-         sqrt((2*l1+1.0)*(2*l2+1.0)*(2*l3+1.0))/sqrt(4.0*pi)*LargeArg3Js(l1,l2,l3)
+         sqrt((2*l1+1.0)*(2*l2+1.0)*(2*l3+1.0))/sqrt(4.0*pi)*wigner3jm0(l1,l2,l3)
     !*Wig0(l1,l3,l2)
   end function Fc
 
