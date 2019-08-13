@@ -48,19 +48,19 @@ program bisvar
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
   want_ISW_correction = .false. 
 
-  do i  = 1, 256
-     if (i .le. 19) then
-        ellar(i) = i+1
-        dellar(i) = 1.d0
-     elseif (i .le. 75 .and. i .ge. 20) then 
-        ellar(i) = ellar(i-1) + 2
-        dellar(i) = 2.d0
-     elseif (i .le. 257 .and. i .ge. 76) then
-        ellar(i)  = ellar(i-1) + 20
-        dellar(i) = 20.d0
-     endif
-     !write(*,*) 'ell:', ellar(i)
-  enddo
+!!$  do i  = 1, 256
+!!$     if (i .le. 19) then
+!!$        ellar(i) = i+1
+!!$        dellar(i) = 1.d0
+!!$     elseif (i .le. 75 .and. i .ge. 20) then 
+!!$        ellar(i) = ellar(i-1) + 2
+!!$        dellar(i) = 2.d0
+!!$     elseif (i .le. 257 .and. i .ge. 76) then
+!!$        ellar(i)  = ellar(i-1) + 20
+!!$        dellar(i) = 20.d0
+!!$     endif
+!!$     !write(*,*) 'ell:', ellar(i)
+!!$  enddo
   do i  = 1, 256
      if (i .le. 47) then
         ellar(i) = i+1
@@ -75,8 +75,8 @@ program bisvar
         ellar(i)  = ellar(i-1) + 24
         dellar(i) = 24.d0
      else
-        ellar(i)  = ellar(i-1) + 50
-        dellar(i) = 50.d0
+        ellar(i)  = ellar(i-1) + 48
+        dellar(i) = 48.d0
      endif
      !write(*,*) 'ell:', ellar(i)
   enddo
@@ -149,7 +149,7 @@ program bisvar
   !(is this correct?). This would lower the number of sample points. 
 
   !lmax = 1000
-  intmax = 160
+  intmax = 100
   lmax = ellar(intmax)
   lmin = 2
 
@@ -170,7 +170,7 @@ program bisvar
   SumNGauss = 0.d0
   TotNoise = 0.d0
 
-  daanWiger = .True.
+  daanWiger = .False.
   doAllTerms = .False.
 
   TotSumCV = 0.d0
@@ -316,7 +316,7 @@ program bisvar
               min_l = min_l+1 !l3 should only lead to parity even numbers
            end if
            max_l = min(lmax,l1+l2)
-           do l3=min_l,max_l !sum has to be even
+           do l3=min_l,max_l,2 !sum has to be even
               a3j(l2,l3) = wigner3jm0(l1,l2,l3)
            enddo
         else
@@ -326,8 +326,9 @@ program bisvar
 
      enddo
 
-     do j = 1, intmax !l2 loop
-        l2 = ellar(j)
+     !do j = 1, intmax !l2 loop
+     do l2 = lmin, lmax
+        !l2 = ellar(j)
         min_l = max(abs(l1-l2),lmin)
         min_s = max(abs(i-j),1)
         if (mod(l1+l2+min_l,2)/=0) then
@@ -340,17 +341,18 @@ program bisvar
         max_s = min(intmax,i+j)
         !checking
         !call GetThreeJs(atj2(abs(l2-l1)),l1,l2,0,0)
-        !do l3=min_l,max_l, 2 !sum has to be even
-        do s = min_s, max_s
+        do l3=min_l,max_l, 2 !sum has to be even
+        !do s = min_s, max_s
           
-           l3 = ellar(s)
+           !l3 = ellar(s)
            !diagonal 
            !write(*,*) atj2(l3)
            l1b=l1
            !l2b=l2
            !l3b=l3
-           do k = 1, intmax !l2b
-              l2b = ellar(k)
+           !do k = 1, intmax !l2b
+           do l2b = lmin, lmax
+              !l2b = ellar(k)
               min_lb= max(abs(l1b-l2b),lmin)
               min_p = max(abs(i-k),1)
                       
@@ -364,14 +366,17 @@ program bisvar
               max_lb = min(lmax,l1b+l2b)
               max_p = min(intmax,i+k)
               
-              !do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
-              do p = min_p, max_p
-                 l3b  = ellar(p)
+              do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
+              !do p = min_p, max_p
+              !   l3b  = ellar(p)
                  !seems that I forgot a symmetry is broken in the Cl's
-                 DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cl(1,l3)/Cl(1,l3b)
+                 !DB(4,1) = a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cl(1,l3)/Cl(1,l3b)
+                 !DB(4,2) = DB(4,1)
+                 !DB(4,3) = DB(4,1)
+                 !DB(4,4) = DB(4,1)
                  DB(4,2) = a3j(l3,l2)*a3j(l2b,l3b)*FcM(l2,l1,l3)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cl(1,l2)/Cl(1,l3b)
-                 DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cl(1,l3)/Cl(1,l2b)
-                 DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cl(1,l2)/Cl(1,l2b)
+                 !DB(4,3) = a3j(l2,l3)*a3j(l3b,l2b)*FcM(l3,l1,l2)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cl(1,l3)/Cl(1,l2b)
+                 !DB(4,4) = a3j(l3,l2)*a3j(l3b,l2b)*FcM(l2,l1,l3)*FcM(l2b,l1,l3b)/(2*l1+1.d0)/Cl(1,l2)/Cl(1,l2b)
 
 
 !!$                 call deltaB3(l1,l2,l3,l2b,l3b,Cll(1,l1),Cll(1,l3),Cll(1,l3b),pClpp,lmax,DB(3,1)) 
@@ -395,13 +400,13 @@ program bisvar
 
                  !delta (N)^2 
                  !comment: pClpp(1,l1)/Cll(1,l1) comes from Clpp(l1) /Cl(l1b), but l1 = l1b
-                 DSNonGauss = 9.d0*pClpp(1,l1)/Cl(1,l1)*sigsq*sum(DB(4,1:4))*dellar(i)*dellar(j)*dellar(k)*dellar(s)*dellar(p)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                 DSNonGauss = 4.d0*9.d0*pClpp(1,l1)/Cl(1,l1)*sigsq*DB(4,2)*dellar(i)/36!*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
                  !l3b = l3
                  if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
                     !sigsqX = (floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3))**2
                     !write(*,*) sigsqX - sigsq
                     !<S>  replaced Cll with Cl. Differene is too large for just being lensed versus unlensed 
-                    DSNGauss = sigsq/Cl(1,l1)/Cl(1,l2)/Cl(1,l3)*dellar(i)*dellar(j)*dellar(s)/6.!tr(l1,l2,l3)
+                    DSNGauss = sigsq/Cl(1,l1)/Cl(1,l2)/Cl(1,l3)*dellar(i)/6!*dellar(j)/6.!tr(l1,l2,l3)
                     !<N^2> + delta <N^2>
                     TotNoise = TotNoise + DSNGauss + DSNonGauss
                     TotSumGauss = TotSumGauss + DSNGauss
