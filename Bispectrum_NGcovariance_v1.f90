@@ -110,23 +110,30 @@ program bisvar
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
   Cllfile = trim(Folder1)//trim('SOspectra_lensedCls.dat')
   !from Alex:
-  Clfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lenspotentialCls.dat'
-  Cllfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lensedCls.dat'
+  !Clfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lenspotentialCls.dat'
+  !Cllfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lensedCls.dat'
   open(unit=17,file = Clfile, status='old')
   open(unit=18,file = Cllfile, status='old')
 
 
   call getenv('SCRATCHDIR',tensDir)
-  tensDir = TRIM(tensDir)//'/Data/alphaBetaDir/'
+  !Will:
+  !tensDir = TRIM(tensDir)//'/Data/alphaBetaDir/'
+  !Daan:
+  tensDir = '/mnt/raid-cita/meerburg/SO_forecasts/alphabeta'
   write(*,*) tensDir      
   !allocate and read bessel transforms
   !you should check the subroutine to see if your file is directed correctly
   !it is now set to my directory 
     !allocate and read bessel transforms
     !you should check the subroutine to see if your file is directed correctly
-    !it is now set to my directory 
+  !it is now set to my directory
+  !Will
   alphabetafile = TRIM(tensDir)//'/l_r_alpha_beta.txt.MAX4000'
   alphabetaPolfile = TRIM(tensDir)//'/l_r_alpha_beta_Pol.txt.MAX4000'
+  !Daan
+  !alphabetafile = TRIM(tensDir)//'l_r_alpha_beta_new_Lmax5000.txt'
+  !alphabetaPolfile = TRIM(tensDir)//'l_r_gamma_delta_new_Lmax5000.txt'
   P%flagDoWigner=flagDoWigner
   if (shape .eq. 5) then
     P%flagDoWigner = 5
@@ -159,7 +166,7 @@ program bisvar
   close(17)
   close(18)
 
-  intmax = 79
+  intmax = 39
   !lmax = ellar(intmax)
   lmax = 2000
   lmin = 2
@@ -257,7 +264,7 @@ program bisvar
   
   do i = 1, intmax !multiples of 32
      l1 = ellar(i)
-     write(*,*) 'l1:', l1
+     !write(*,*) 'l1:', l1
      TotSumGauss = 0.d0
      TotSumNGauss = 0.d0
 
@@ -384,8 +391,8 @@ program bisvar
      TotSumGauss_outer = TotSumGauss_outer + TotSumGauss
      TotSumNGauss_outer = TotSumNGauss_outer + TotSumNGauss
      write(12,'(I4,2E18.7)') l1, TotSumNGauss, TotSumGauss
-     write(*,*) l1,TotSumNGauss,TotSumGauss, TotSumCV/(TotSumNGauss-TotSumGauss+TotSumCV)
-     write(*,*) l1,TotSumNGauss_outer,TotSumGauss_outer, TotSumCV/(TotSumNGauss_outer-TotSumGauss_outer+TotSumCV)
+     !write(*,*) l1,TotSumNGauss,TotSumGauss, TotSumCV/(TotSumNGauss-TotSumGauss+TotSumCV)
+     write(*,'(I4,3E16.7)') l1,TotSumNGauss_outer,TotSumGauss_outer, TotSumCV/(TotSumNGauss_outer-TotSumGauss_outer+TotSumCV)
   enddo !l1
 
   write(*,'(I4,4E17.8)') lmax, (SumNGauss-SumGauss)/TotSumCV
