@@ -17,15 +17,16 @@ program bisvar
   !wigner 3j
   real(dl)  :: atj(0:20000),atj2(0:20000)
   real(dl), pointer :: a3j(:,:), a3joC(:,:)
-  real(dl), pointer :: bispectrum(:,:,:), bis(:,:)
+  real(dl), pointer :: bispectrum(:,:,:),bispectrum_ISWlens(:,:,:), bis(:,:),bis_ISWlens(:,:)
 
   real(dl) :: CMB2COBEnorm = 7428350250000.d0
   real(dl) :: DB
 
   type(bfs) :: P
+  type(bfs) :: P_ISWlens
   real(dl) :: DSNGauss, DSNonGauss, TotSumGauss, TotSumNGauss,TotSumNGaussBD4,DSNonGaussP
   real(dl) :: SumNGauss, SumGauss, TotNoise
-  real(dl) :: sigsq, sigsqX, fnl, fnlISW, fnlISWb
+  real(dl) :: sigsq, sigsqX, fnl,fnlb, fnlISW, fnlISWb
   real(dl) :: TotSumGauss_outer, TotSumNGauss_outer
   real(dl) :: Det,TempCovCV,TotSumCV,DetISWLens,TotSumCVISWLens,DetLensCross,TotSumCVLensCross
   real(dl) :: DetFishCV, DefnlMarCV
@@ -42,11 +43,10 @@ program bisvar
   real(dl) ::stepsum, DBx
   real(dl), allocatable ::  tempB3(:,:,:,:)
 
-  integer ::  flagDoWigner,shape,nfields
+  integer ::  shape,nfields
   character(120) :: alphabetafile, alphabetaPolfile,tensDir
 
   shape = 1
-  flagDoWigner = 0
   nfields = 1
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
@@ -110,10 +110,6 @@ program bisvar
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
   Cllfile = trim(Folder1)//trim('SOspectra_lensedCls.dat')
   !from Alex:
-  Clfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lenspotentialCls.dat'
-  Cllfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lensedCls.dat'
-  open(unit=17,file = Clfile, status='old')
-  open(unit=18,file = Cllfile, status='old')
 
 
   call getenv('SCRATCHDIR',tensDir)
@@ -127,14 +123,16 @@ program bisvar
     !it is now set to my directory 
   alphabetafile = TRIM(tensDir)//'/l_r_alpha_beta.txt.MAX4000'
   alphabetaPolfile = TRIM(tensDir)//'/l_r_alpha_beta_Pol.txt.MAX4000'
-  P%flagDoWigner=flagDoWigner
-  if (shape .eq. 5) then
-    P%flagDoWigner = 5
-  endif
+  P%flagDoWigner=0
+  P_ISWlens%flagDoWigner =5
   call allocate_besseltransforms(P,alphabetafile,alphabetaPolfile,cllFile,ClFile)
-  P%flagDoWigner=flagDoWigner
+  call allocate_besseltransforms(P_ISWlens,alphabetafile,alphabetaPolfile,cllFile,ClFile)
+  P_ISWlens%flagDoWigner = 0
 
-
+  Clfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lenspotentialCls.dat'
+  Cllfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lensedCls.dat'
+  open(unit=17,file = Clfile, status='old')
+  open(unit=18,file = Cllfile, status='old')
   
 
 
@@ -186,17 +184,18 @@ program bisvar
   !want to use analytical approximation of wigner3J (slightly faster)
   AWigner = .True.
 
-  if(want_ISW_correction) then   
+  !if(want_ISW_correction) then   
 
      !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
      !$OMP PRIVATE(l1,l2,l3, min_l,max_l), &
-     !$OMP PRIVATE(i,Det,TempCovCV,atj,bis) &
+     !$OMP PRIVATE(i,Det,TempCovCV,atj,bis,bis_ISWlens) &
      !$OMP PRIVATE(DetISWLens,DetLensCross,fnlISW,fnl) &
      !$OMP REDUCTION(+:TotSumCV,TotSumCVISWLens,TotSumCVLensCross) 
 
      do l1 = lmin, lmax
 
         allocate(bis(nfields**3,lmax))
+        allocate(bis_ISWlens(nfields**3,lmax))
         do l2 =  max(lmin,l1), lmax
            min_l = max(abs(l1-l2),l2)
            if (mod(l1+l2+min_l,2)/=0) then
@@ -206,6 +205,7 @@ program bisvar
 
            bis = 0
            call get_bispectrum_sss(P,l1,l2,2,lmax,shape,nfields,bis)
+           call get_bispectrum_sss(P_ISWlens,l1,l2,2,lmax,5,nfields,bis_ISWlens)
            call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
 
            do l3=min_l,max_l, 2 !sum has to be even
@@ -220,9 +220,10 @@ program bisvar
               !fnl auto 
               TotSumCV = TotSumCV + Det*TempCovCV/tr(l1,l2,l3)
 
-              fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3),1) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2),1) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3),1) + &
-                   fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1),1) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2),1) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1),1)
-              DetISWLens = fnlISW*fnlISW*atj(l3)**2*prefactor(l1,l2,l3)**2 
+              !fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3),1) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2),1) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3),1) + &
+              !     fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1),1) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2),1) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1),1)
+              fnlISW = bis_ISWlens(1,l3)*.5 ! 1/2 to account for term in bis
+              DetISWLens = fnlISW*fnlISW*atj(l3)**2*prefactor(l1,l2,l3)**2!*.25
               !auto lensing
               TotSumCVISWLens = TotSumCVISWLens + DetISWLens*TempCovCV/tr(l1,l2,l3)
 
@@ -234,6 +235,7 @@ program bisvar
            enddo !l3 loop
         enddo !l2 loop
         deallocate(bis)
+        deallocate(bis_ISWlens)
      enddo !L1 loop
      !$OMP END PARAllEl DO
 
@@ -241,11 +243,15 @@ program bisvar
      DetFishCV = TotSumCVISWLens*TotSumCV -TotSumCVLensCross**2
      alpha = TotSumCVISWLens/DetFishCV !C/det
      beta = -TotSumCVLensCross/DetFishCV !A/det 
-
+     if(.not. want_ISW_correction) then
+      alpha=1./TotSumCV
+      beta = 0.
+     endif
      write(*,*) 'lensing-ISW-fnl_local correlation coefficient:', TotSumCVLensCross/TotSumCV**(1./2)/TotSumCVISWLens**(1./2)
      write(*,*) 'Fisher local error:', 1/TotSumCV**(1./2)
+     write(*,*) 'Fisher ISW-lensing error:', 1/TotSumCVISWLens**(1./2)
      write(*,*) 'alpha', alpha, 'beta', beta
-  endif
+  !endif
 
 
   open(unit=12,file='ellarmax_128_l1_l2_l2p_x3.txt', status = 'replace')
@@ -263,12 +269,17 @@ program bisvar
 
      allocate(a3j(2*lmax,2*lmax))
      allocate(bispectrum(nfields**3,lmax,lmax))
+     allocate(bispectrum_ISWlens(nfields**3,lmax,lmax))
      allocate(bis(nfields**3,lmax))
+     allocate(bis_ISWlens(nfields**3,lmax))
 
      do l2 = lmin, lmax
         bis = 0
         call get_bispectrum_sss(P,l1,l2,2,lmax,shape,nfields,bis)
         bispectrum(1,l2,:) = bis(1,:)*.5 ! .5 for account for 2 in prefactor
+        bis_ISWlens = 0
+        call get_bispectrum_sss(P_ISWlens,l1,l2,2,lmax,5,nfields,bis_ISWlens)
+        bispectrum_ISWlens(1,l2,:) = bis_ISWlens(1,:)*.5 ! .5 for account for 2 in prefactor
 
         if (AWigner) then
            min_l = max(abs(l1-l2),lmin)  
@@ -293,6 +304,7 @@ program bisvar
       end if
       do l3 = min_l,max_l,2
         bispectrum(1,l3,l2) = bispectrum(1,l2,l3)
+        bispectrum_ISWlens(1,l3,l2) = bispectrum_ISWlens(1,l2,l3)
         !bispectrum(1,l3,l2) = floc(l1,l2,l3)
         !bispectrum(1,l2,l3) = floc(l1,l2,l3)
         !write(*,*) bispectrum(1,l2,l3),bispectrum(1,l3,l2),floc(l1,l2,l3),floc(l1,l3,l2)
@@ -315,7 +327,12 @@ program bisvar
         !checking
         !call GetThreeJs(atj2(abs(l2-l1)),l1,l2,0,0)
         do l3=min_l,max_l, 2 !sum has to be even
-
+           if (bispectrum_ISWlens(1,l2,l3) .eq. 0) then
+            write(*,*) l2,l3,bispectrum_ISWlens(1,l2,l3)
+          endif
+           if (bispectrum(1,l2,l3) .eq. 0) then
+            write(*,*) l2,l3,bispectrum(1,l2,l3)
+          endif
            l1b=l1 !l1 = l1'
 
            do l2b = lmin, lmax
@@ -329,23 +346,30 @@ program bisvar
               
               do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
                  !4 possible permutations of the second index
-                 DB = Cl(1,l2)*Cl(1,l2b)*4.0*a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l3b)/Cll(1,l2)/Cll(1,l2b)                  
+                 DB = Cll(1,l2)*Cll(1,l2b)*4.0*a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l3b)/Cll(1,l2)/Cll(1,l2b)                  
 
                  !signal squared (in SW limit) 
                  !fnl = floc(l1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
                  !sigsq = fnl*floc(l1b,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
-                 fnl = bispectrum(1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
-                 sigsq = fnl*bispectrum(1,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
+                 !fnl = bispectrum(1,l2,l3)*a3j(l2,l3)*prefactor(l1,l2,l3)
+                 !sigsq = fnl*bispectrum(1,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
 
-!!$                 if(want_ISW_correction) then
-!!$                    fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
-!!$                         fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
-!!$                    fnlISWb = fPhiISW(l1b,l2b,l3b,pClpp(2,l2b),Cll(1,l3b)) + fPhiISW(l1b,l3b,l2b,pClpp(2,l3b),Cll(1,l2b)) + fPhiISW(l2b,l1b,l3b,pClpp(2,l2b),Cll(1,l3b)) + &
-!!$                         fPhiISW(l3b,l2b,l1b,pClpp(2,l2b),Cll(1,l1b)) + fPhiISW(l3b,l1b,l2b,pClpp(2,l1b),Cll(1,l2b)) + fPhiISW(l2b,l3b,l1b,pClpp(2,l3b),Cll(1,l1b))
-!!$                    tempfac = a3j(l2,l3)*prefactor(l1,l2,l3)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
-!!$                    sigsq = tempfac*( alpha**2*floc(l1,l2,l3)*floc(l1b,l2b,l3b) &
-!!$                         + alpha*beta*floc(l1,l2,l3)*fnlISWb + alpha*beta*floc(l1b,l2b,l3b)*fnlISW + beta**2*fnlISW*fnlISWb)
-!!$                 endif
+                 !if(want_ISW_correction) then
+                    !fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
+                    !     fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
+                    !fnlISWb = fPhiISW(l1b,l2b,l3b,pClpp(2,l2b),Cll(1,l3b)) + fPhiISW(l1b,l3b,l2b,pClpp(2,l3b),Cll(1,l2b)) + fPhiISW(l2b,l1b,l3b,pClpp(2,l2b),Cll(1,l3b)) + &
+                    !     fPhiISW(l3b,l2b,l1b,pClpp(2,l2b),Cll(1,l1b)) + fPhiISW(l3b,l1b,l2b,pClpp(2,l1b),Cll(1,l2b)) + fPhiISW(l2b,l3b,l1b,pClpp(2,l3b),Cll(1,l1b))
+                    fnlISW = bispectrum_ISWlens(1,l2,l3)
+                    fnlISWb = bispectrum_ISWlens(1,l2b,l3b)
+                    fnl = bispectrum(1,l2,l3)
+                    fnlb = bispectrum(1,l2b,l3b)
+                    tempfac = a3j(l2,l3)*prefactor(l1,l2,l3)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
+                    !sigsq = tempfac*( alpha**2*floc(l1,l2,l3)*floc(l1b,l2b,l3b) &
+                     !    + alpha*beta*floc(l1,l2,l3)*fnlISWb + alpha*beta*floc(l1b,l2b,l3b)*fnlISW + beta**2*fnlISW*fnlISWb)
+
+                    sigsq = tempfac*( alpha**2*fnl*fnlb &
+                         + alpha*beta*fnl*fnlISWb + alpha*beta*fnlb*fnlISW + beta**2*fnlISW*fnlISWb)
+                 !endif
 
                  !delta (N)^2 . nine possible permutations of the first index
                  DSNonGauss = 9.d0*pClpp(1,l1)/Cl(1,l1)*sigsq*DB/36.!*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
@@ -380,12 +404,16 @@ program bisvar
 
      deallocate(bis)
      deallocate(bispectrum)
+     deallocate(bis_ISWlens)
+     deallocate(bispectrum_ISWlens)
      deallocate(a3j)
      TotSumGauss_outer = TotSumGauss_outer + TotSumGauss
      TotSumNGauss_outer = TotSumNGauss_outer + TotSumNGauss
      write(12,'(I4,2E18.7)') l1, TotSumNGauss, TotSumGauss
-     write(*,*) l1,TotSumNGauss,TotSumGauss, TotSumCV/(TotSumNGauss-TotSumGauss+TotSumCV)
+     !write(*,*) l1,TotSumNGauss,TotSumGauss, TotSumCV/(TotSumNGauss-TotSumGauss+TotSumCV)
      write(*,*) l1,TotSumNGauss_outer,TotSumGauss_outer, TotSumCV/(TotSumNGauss_outer-TotSumGauss_outer+TotSumCV)
+     !write(*,*) l1,TotSumNGauss/alpha,TotSumGauss/alpha, alpha/(TotSumNGauss-TotSumGauss+alpha)
+     write(*,*) l1,TotSumNGauss_outer/alpha,TotSumGauss_outer/alpha, alpha/(TotSumNGauss_outer-TotSumGauss_outer+alpha)
   enddo !l1
 
   write(*,'(I4,4E17.8)') lmax, (SumNGauss-SumGauss)/TotSumCV
