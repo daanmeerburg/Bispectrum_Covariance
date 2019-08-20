@@ -1,7 +1,7 @@
 !test program to compute components of the bispectrum covariance from lensing 
 
 program bisvar 
- Use SepBispectrum
+  Use SepBispectrum
   implicit none
   !integer, parameter :: dl= KIND(1.d0)
   real(dl), parameter :: pi = 3.14159265359
@@ -50,7 +50,7 @@ program bisvar
   nfields = 1
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
-  want_ISW_correction = .true. 
+  want_ISW_correction = .false. 
 
   !various binning schemes
 !!$  do i  = 1, 256
@@ -110,10 +110,10 @@ program bisvar
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
   Cllfile = trim(Folder1)//trim('SOspectra_lensedCls.dat')
   !from Alex:
-  !Clfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lenspotentialCls.dat'
-  !Cllfile = './SO_forecasts/CAMB/cosmo2017_10K_acc3_lensedCls.dat'
-  open(unit=17,file = Clfile, status='old')
-  open(unit=18,file = Cllfile, status='old')
+  !Clfile = trim(Folder1)//trim('cosmo2017_10K_acc3_lenspotentialCls.dat')
+  !Cllfile = trim(Folder1)//trim('cosmo2017_10K_acc3_lensedCls.dat')
+  !open(unit=17,file = Clfile, status='old')
+  !open(unit=18,file = Cllfile, status='old')
 
 
 
@@ -126,8 +126,8 @@ program bisvar
   !allocate and read bessel transforms
   !you should check the subroutine to see if your file is directed correctly
   !it is now set to my directory 
-    !allocate and read bessel transforms
-    !you should check the subroutine to see if your file is directed correctly
+  !allocate and read bessel transforms
+  !you should check the subroutine to see if your file is directed correctly
   !it is now set to my directory
   !Will
   alphabetafile = TRIM(tensDir)//'/l_r_alpha_beta.txt.MAX4000'
@@ -137,19 +137,17 @@ program bisvar
   !alphabetaPolfile = TRIM(tensDir)//'l_r_gamma_delta_new_Lmax5000.txt'
   !P%flagDoWigner=flagDoWigner
   if (shape .eq. 5) then
-    P%flagDoWigner = 5
+     P%flagDoWigner = 5
   endif
 
   P%flagDoWigner=0
-  P_ISWlens%flagDoWigner =5
+  P_ISWlens%flagDoWigner = 5
   call allocate_besseltransforms(P,alphabetafile,alphabetaPolfile,cllFile,ClFile)
   call allocate_besseltransforms(P_ISWlens,alphabetafile,alphabetaPolfile,cllFile,ClFile)
   P_ISWlens%flagDoWigner = 0
 
   open(unit=17,file = Clfile, status='old')
   open(unit=18,file = Cllfile, status='old')
-  
-
 
   do j = 1, lmax
      !#    L    TT             EE             BB             TE 
@@ -201,71 +199,69 @@ program bisvar
 
   !if(want_ISW_correction) then   
 
-     !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-     !$OMP PRIVATE(l1,l2,l3, min_l,max_l), &
-     !$OMP PRIVATE(i,Det,TempCovCV,atj,bis,bis_ISWlens) &
-     !$OMP PRIVATE(DetISWLens,DetLensCross,fnlISW,fnl) &
-     !$OMP REDUCTION(+:TotSumCV,TotSumCVISWLens,TotSumCVLensCross) 
+  !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
+  !$OMP PRIVATE(l1,l2,l3, min_l,max_l), &
+  !$OMP PRIVATE(Det,TempCovCV,atj,bis,bis_ISWlens) &
+  !$OMP PRIVATE(DetISWLens,DetLensCross,fnlISW,fnl) &
+  !$OMP REDUCTION(+:TotSumCV,TotSumCVISWLens,TotSumCVLensCross) 
+  do l1 = lmin, lmax
+     allocate(bis(nfields**3,lmax))
+     allocate(bis_ISWlens(nfields**3,lmax))
+     do l2 =  max(lmin,l1), lmax
+        min_l = max(abs(l1-l2),l2)
+        if (mod(l1+l2+min_l,2)/=0) then
+           min_l = min_l+1 !l3 should only lead to parity even numbers
+        end if
+        max_l = min(lmax,l1+l2)
 
-     do l1 = lmin, lmax
+        bis = 0
+        call get_bispectrum_sss(P,l1,l2,2,lmax,shape,nfields,bis)
+        call get_bispectrum_sss(P_ISWlens,l1,l2,2,lmax,5,nfields,bis_ISWlens)
+        call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
 
-        allocate(bis(nfields**3,lmax))
-        allocate(bis_ISWlens(nfields**3,lmax))
-        do l2 =  max(lmin,l1), lmax
-           min_l = max(abs(l1-l2),l2)
-           if (mod(l1+l2+min_l,2)/=0) then
-              min_l = min_l+1 !l3 should only lead to parity even numbers
-           end if
-           max_l = min(lmax,l1+l2)
+        do l3=min_l,max_l, 2 !sum has to be even
 
-           bis = 0
-           call get_bispectrum_sss(P,l1,l2,2,lmax,shape,nfields,bis)
-           call get_bispectrum_sss(P_ISWlens,l1,l2,2,lmax,5,nfields,bis_ISWlens)
-           call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
+           !signal squared (in SW limit) 
+           !fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
+           fnl = bis(1,l3)*atj(l3)*prefactor(l1,l2,l3)*.5 ! 1/2 to account for term in bis
+           Det = fnl*fnl
+           !auto primordial 
+           TempCovCV = 1.d0/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
 
-           do l3=min_l,max_l, 2 !sum has to be even
+           !fnl auto 
+           TotSumCV = TotSumCV + Det*TempCovCV/tr(l1,l2,l3)
 
-              !signal squared (in SW limit) 
-              !fnl = floc(l1,l2,l3)*atj(l3)*prefactor(l1,l2,l3)
-              fnl = bis(1,l3)*atj(l3)*prefactor(l1,l2,l3)*.5 ! 1/2 to account for term in bis
-              Det = fnl*fnl
-              !auto primordial 
-              TempCovCV = 1.d0/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)
+           !fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3),1) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2),1) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3),1) + &
+           !     fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1),1) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2),1) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1),1)
+           fnlISW = bis_ISWlens(1,l3)*.5 ! 1/2 to account for term in bis
+           DetISWLens = fnlISW*fnlISW*atj(l3)**2*prefactor(l1,l2,l3)**2!*.25
+           !auto lensing
+           TotSumCVISWLens = TotSumCVISWLens + DetISWLens*TempCovCV/tr(l1,l2,l3)
 
-              !fnl auto 
-              TotSumCV = TotSumCV + Det*TempCovCV/tr(l1,l2,l3)
+           !ISW-lensing x primordial and ISW-reinization x primordial (any shape)
+           DetLensCross =fnlISW*fnl*atj(l3)*prefactor(l1,l2,l3)
 
-              !fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3),1) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2),1) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3),1) + &
-              !     fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1),1) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2),1) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1),1)
-              fnlISW = bis_ISWlens(1,l3)*.5 ! 1/2 to account for term in bis
-              DetISWLens = fnlISW*fnlISW*atj(l3)**2*prefactor(l1,l2,l3)**2!*.25
-              !auto lensing
-              TotSumCVISWLens = TotSumCVISWLens + DetISWLens*TempCovCV/tr(l1,l2,l3)
+           TotSumCVLensCross = TotSumCVLensCross + DetLensCross*TempCovCV/tr(l1,l2,l3)                             
 
-              !ISW-lensing x primordial and ISW-reinization x primordial (any shape)
-              DetLensCross =fnlISW*fnl*atj(l3)*prefactor(l1,l2,l3)
+        enddo !l3 loop
+     enddo !l2 loop
+     deallocate(bis)
+     deallocate(bis_ISWlens)
+  enddo !L1 loop
+  !$OMP END PARAllEl DO
+  
 
-              TotSumCVLensCross = TotSumCVLensCross + DetLensCross*TempCovCV/tr(l1,l2,l3)                             
-
-           enddo !l3 loop
-        enddo !l2 loop
-        deallocate(bis)
-        deallocate(bis_ISWlens)
-     enddo !L1 loop
-     !$OMP END PARAllEl DO
-
-
-     DetFishCV = TotSumCVISWLens*TotSumCV -TotSumCVLensCross**2
-     alpha = TotSumCVISWLens/DetFishCV !C/det
-     beta = -TotSumCVLensCross/DetFishCV !A/det 
-     if(.not. want_ISW_correction) then
-      alpha=1./TotSumCV
-      beta = 0.
-     endif
-     write(*,*) 'lensing-ISW-fnl_local correlation coefficient:', TotSumCVLensCross/TotSumCV**(1./2)/TotSumCVISWLens**(1./2)
-     write(*,*) 'Fisher local error:', 1/TotSumCV**(1./2)
-     write(*,*) 'Fisher ISW-lensing error:', 1/TotSumCVISWLens**(1./2)
-     write(*,*) 'alpha', alpha, 'beta', beta
+  DetFishCV = TotSumCVISWLens*TotSumCV -TotSumCVLensCross**2
+  alpha = TotSumCVISWLens/DetFishCV !C/det
+  beta = -TotSumCVLensCross/DetFishCV !A/det 
+  if(.not. want_ISW_correction) then
+     alpha=1./TotSumCV
+     beta = 0.
+  endif
+  write(*,*) 'lensing-ISW-fnl_local correlation coefficient:', TotSumCVLensCross/TotSumCV**(1./2)/TotSumCVISWLens**(1./2)
+  write(*,*) 'Fisher local error:', 1/TotSumCV**(1./2)
+  write(*,*) 'Fisher ISW-lensing error:', 1/TotSumCVISWLens**(1./2)
+  write(*,*) 'alpha', alpha, 'beta', beta
   !endif
 
 
@@ -275,7 +271,7 @@ program bisvar
 !!!!!testing; with Fisher code I find fnl_template error of 16.658 for lmax = 500 and for 44.511 lmax = 250
 
   !call get_bispectrum_sss(P,l1,l2,2,lmax,shape,nfields,bis)
-  
+  write(*,*) intmax
   do i = 1, intmax !multiples of 32
      l1 = ellar(i)
      !write(*,*) 'l1:', l1
@@ -312,18 +308,18 @@ program bisvar
         endif
      enddo
      do l2 = lmin, lmax
-      max_l = min(lmax,l1+l2)
-      min_l = max(abs(l1-l2),lmin)  
-      if (mod(l1+l2+min_l,2)/=0) then
-        min_l = min_l+1 !l3 should only lead to parity even numbers
-      end if
-      do l3 = min_l,max_l,2
-        bispectrum(1,l3,l2) = bispectrum(1,l2,l3)
-        bispectrum_ISWlens(1,l3,l2) = bispectrum_ISWlens(1,l2,l3)
-        !bispectrum(1,l3,l2) = floc(l1,l2,l3)
-        !bispectrum(1,l2,l3) = floc(l1,l2,l3)
-        !write(*,*) bispectrum(1,l2,l3),bispectrum(1,l3,l2),floc(l1,l2,l3),floc(l1,l3,l2)
-      enddo
+        max_l = min(lmax,l1+l2)
+        min_l = max(abs(l1-l2),lmin)  
+        if (mod(l1+l2+min_l,2)/=0) then
+           min_l = min_l+1 !l3 should only lead to parity even numbers
+        end if
+        do l3 = min_l,max_l,2
+           bispectrum(1,l3,l2) = bispectrum(1,l2,l3)
+           bispectrum_ISWlens(1,l3,l2) = bispectrum_ISWlens(1,l2,l3)
+           !bispectrum(1,l3,l2) = floc(l1,l2,l3)
+           !bispectrum(1,l2,l3) = floc(l1,l2,l3)
+           !write(*,*) bispectrum(1,l2,l3),bispectrum(1,l3,l2),floc(l1,l2,l3),floc(l1,l3,l2)
+        enddo
      enddo
      !do j = 1, intmax !l2 loop
      !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
@@ -343,11 +339,11 @@ program bisvar
         !call GetThreeJs(atj2(abs(l2-l1)),l1,l2,0,0)
         do l3=min_l,max_l, 2 !sum has to be even
            if (bispectrum_ISWlens(1,l2,l3) .eq. 0) then
-            write(*,*) l2,l3,bispectrum_ISWlens(1,l2,l3)
-          endif
+              write(*,*) l2,l3,bispectrum_ISWlens(1,l2,l3)
+           endif
            if (bispectrum(1,l2,l3) .eq. 0) then
-            write(*,*) l2,l3,bispectrum(1,l2,l3)
-          endif
+              write(*,*) l2,l3,bispectrum(1,l2,l3)
+           endif
            l1b=l1 !l1 = l1'
 
            do l2b = lmin, lmax
@@ -358,7 +354,7 @@ program bisvar
                  min_lb = min_lb+1 !l3 should only lead to parity even numbers
               end if
               max_lb = min(lmax,l1b+l2b)
-              
+
               do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
                  !4 possible permutations of the second index
                  DB = Cll(1,l2)*Cll(1,l2b)*4.0*a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l3b)/Cll(1,l2)/Cll(1,l2b)                  
@@ -370,20 +366,20 @@ program bisvar
                  !sigsq = fnl*bispectrum(1,l2b,l3b)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
 
                  !if(want_ISW_correction) then
-                    !fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
-                    !     fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
-                    !fnlISWb = fPhiISW(l1b,l2b,l3b,pClpp(2,l2b),Cll(1,l3b)) + fPhiISW(l1b,l3b,l2b,pClpp(2,l3b),Cll(1,l2b)) + fPhiISW(l2b,l1b,l3b,pClpp(2,l2b),Cll(1,l3b)) + &
-                    !     fPhiISW(l3b,l2b,l1b,pClpp(2,l2b),Cll(1,l1b)) + fPhiISW(l3b,l1b,l2b,pClpp(2,l1b),Cll(1,l2b)) + fPhiISW(l2b,l3b,l1b,pClpp(2,l3b),Cll(1,l1b))
-                    fnlISW = bispectrum_ISWlens(1,l2,l3)
-                    fnlISWb = bispectrum_ISWlens(1,l2b,l3b)
-                    fnl = bispectrum(1,l2,l3)
-                    fnlb = bispectrum(1,l2b,l3b)
-                    tempfac = a3j(l2,l3)*prefactor(l1,l2,l3)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
-                    !sigsq = tempfac*( alpha**2*floc(l1,l2,l3)*floc(l1b,l2b,l3b) &
-                     !    + alpha*beta*floc(l1,l2,l3)*fnlISWb + alpha*beta*floc(l1b,l2b,l3b)*fnlISW + beta**2*fnlISW*fnlISWb)
+                 !fnlISW = fPhiISW(l1,l2,l3,pClpp(2,l2),Cll(1,l3)) + fPhiISW(l1,l3,l2,pClpp(2,l3),Cll(1,l2)) + fPhiISW(l2,l1,l3,pClpp(2,l2),Cll(1,l3)) + &
+                 !     fPhiISW(l3,l2,l1,pClpp(2,l2),Cll(1,l1)) + fPhiISW(l3,l1,l2,pClpp(2,l1),Cll(1,l2)) + fPhiISW(l2,l3,l1,pClpp(2,l3),Cll(1,l1))
+                 !fnlISWb = fPhiISW(l1b,l2b,l3b,pClpp(2,l2b),Cll(1,l3b)) + fPhiISW(l1b,l3b,l2b,pClpp(2,l3b),Cll(1,l2b)) + fPhiISW(l2b,l1b,l3b,pClpp(2,l2b),Cll(1,l3b)) + &
+                 !     fPhiISW(l3b,l2b,l1b,pClpp(2,l2b),Cll(1,l1b)) + fPhiISW(l3b,l1b,l2b,pClpp(2,l1b),Cll(1,l2b)) + fPhiISW(l2b,l3b,l1b,pClpp(2,l3b),Cll(1,l1b))
+                 fnlISW = bispectrum_ISWlens(1,l2,l3)
+                 fnlISWb = bispectrum_ISWlens(1,l2b,l3b)
+                 fnl = bispectrum(1,l2,l3)
+                 fnlb = bispectrum(1,l2b,l3b)
+                 tempfac = a3j(l2,l3)*prefactor(l1,l2,l3)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
+                 !sigsq = tempfac*( alpha**2*floc(l1,l2,l3)*floc(l1b,l2b,l3b) &
+                 !    + alpha*beta*floc(l1,l2,l3)*fnlISWb + alpha*beta*floc(l1b,l2b,l3b)*fnlISW + beta**2*fnlISW*fnlISWb)
 
-                    sigsq = tempfac*( alpha**2*fnl*fnlb &
-                         + alpha*beta*fnl*fnlISWb + alpha*beta*fnlb*fnlISW + beta**2*fnlISW*fnlISWb)
+                 sigsq = tempfac*( alpha**2*fnl*fnlb &
+                      + alpha*beta*fnl*fnlISWb + alpha*beta*fnlb*fnlISW + beta**2*fnlISW*fnlISWb)
                  !endif
 
                  !delta (N)^2 . nine possible permutations of the first index
@@ -428,7 +424,7 @@ program bisvar
      !write(*,*) l1,TotSumNGauss,TotSumGauss, TotSumCV/(TotSumNGauss-TotSumGauss+TotSumCV)
      write(*,'(I4,3E16.7)') l1,TotSumNGauss_outer,TotSumGauss_outer, TotSumCV/(TotSumNGauss_outer-TotSumGauss_outer+TotSumCV)
      !write(*,*) l1,TotSumNGauss/alpha,TotSumGauss/alpha, alpha/(TotSumNGauss-TotSumGauss+alpha)
-     write(*,*) l1,TotSumNGauss_outer/alpha,TotSumGauss_outer/alpha, alpha/(TotSumNGauss_outer-TotSumGauss_outer+alpha)
+     write(*,'(I4,3E16.7)') l1,TotSumNGauss_outer/alpha,TotSumGauss_outer/alpha, alpha/(TotSumNGauss_outer-TotSumGauss_outer+alpha)
 
   enddo !l1
 
@@ -531,303 +527,303 @@ contains
 
   ! end function tr
 
-!   real(dl) function fPhiISW(l1,l2,l3,CPT_l1,CTT_l3)
-!     integer :: l1, l2, l3
-!     real(dl) :: CPT_l1,CTT_l3
-!     fPhiISW = .5*((l1+1)*l1-l2*(l2+1.d0)+l3*(l3+1.d0))*CPT_l1*CTT_l3
-!   end function fPhiISW
-
-!   subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
-!     !Recursive evaluation of 3j symbols. Does minimal error checking on input
-!     !parameters.
-!     implicit none
-!     integer, parameter :: dl = KIND(1.d0)
-!     integer, intent(in) :: l2in,l3in, m2in,m3in
-!     real(dl), dimension(*) :: thrcof
-!     INTEGER, PARAMETER :: i8 = selected_int_kind(18)
-!     integer(i8) :: l2,l3,m2,m3
-!     integer(i8) :: l1, m1, l1min,l1max, lmatch, nfin, a1, a2
-
-!     real(dl) :: newfac, oldfac, sumfor, c1,c2,c1old, dv, denom, x, sum1,sumuni
-!     real(dl) :: x1,x2,x3, y,y1,y2,y3,sum2,sumbac, ratio,cnorm, sign1, thresh
-!     integer i,ier, index, nlim, sign2
-!     integer nfinp1,nfinp2,nfinp3, lstep, nstep2,n
-!     real(dl), parameter :: zero = 0._dl, one = 1._dl
-!     real(dl), parameter ::  tiny = 1.0d-30, srtiny=1.0d-15, huge = 1.d30,srhuge = 1.d15
-
-!     ! routine to generate set of 3j-coeffs (l1,l2,l3\\ m1,m2,m3)
-
-!     ! by recursion from l1min = max(abs(l2-l3),abs(m1)) 
-!     !                to l1max = l2+l3
-!     ! the resulting 3j-coeffs are stored as thrcof(l1-l1min+1)
-
-!     ! to achieve the numerical stability, the recursion will proceed
-!     ! simultaneously forwards and backwards, starting from l1min and l1max
-!     ! respectively.
-!     !
-!     ! lmatch is the l1-value at which forward and backward recursion are
-!     ! matched.
-!     !
-!     ! ndim is the length of the array thrcof
-!     !
-!     ! ier = -1 for all 3j vanish(l2-abs(m2)<0, l3-abs(m3)<0 or not integer)
-!     ! ier = -2 if possible 3j's exceed ndim
-!     ! ier >= 0 otherwise
-
-!     l2=l2in
-!     l3=l3in
-!     m2=m2in
-!     m3=m3in
-!     newfac = 0
-!     lmatch = 0
-!     m1 = -(m2+m3)
-
-!     ! check relative magnitude of l and m values
-!     ier = 0
-
-!     if (l2 < abs(m2) .or. l3 < m3) then
-!        ier = -1
-!        ! call MpiStop('error ier = -1')
-!        print*, 'error ier = -1',l2,abs(m2),l3,m3
-!        stop
-!        return
-!     end if
-
-!     ! limits for l1
-!     l1min = max(abs(l2-l3),abs(m1))
-!     l1max = l2+l3
-
-!     if (l1min >= l1max) then
-!        if (l1min/=l1max) then
-!           ier = -1
-
-!           !call MpiStop('error ier = -1')
-!           print*, 'error ier = -1',l1min,l1max 
-!           stop
-!           return
-!        end if
-
-!        ! reached if l1 can take only one value, i.e.l1min=l1max
-!        thrcof(1) = (-1)**abs(l2+m2-l3+m3)/sqrt(real(l1min+l2+l3+1,dl))
-!        return
-
-!     end if
-
-!     nfin = l1max-l1min+1
-
-!     ! starting forward recursion from l1min taking nstep1 steps
-!     l1 = l1min
-!     thrcof(1) = srtiny
-!     sum1 = (2*l1 + 1)*tiny
-
-!     lstep = 1
-
-! 30  lstep = lstep+1
-!     l1 = l1+1
-
-!     oldfac = newfac
-!     a1 = (l1+l2+l3+1)*(l1-l2+l3)*(l1+l2-l3)
-!     a2 = (l1+m1)*(l1-m1)*(-l1+l2+l3+1)
-!     newfac = sqrt(a2*real(a1,dl))
-!     if (l1 == 1) then
-!        !IF L1 = 1  (L1-1) HAS TO BE FACTORED OUT OF DV, HENCE
-!        c1 = -(2*l1-1)*l1*(m3-m2)/newfac
-!     else
+  !   real(dl) function fPhiISW(l1,l2,l3,CPT_l1,CTT_l3)
+  !     integer :: l1, l2, l3
+  !     real(dl) :: CPT_l1,CTT_l3
+  !     fPhiISW = .5*((l1+1)*l1-l2*(l2+1.d0)+l3*(l3+1.d0))*CPT_l1*CTT_l3
+  !   end function fPhiISW
+
+  !   subroutine GetThreeJs(thrcof,l2in,l3in,m2in,m3in)
+  !     !Recursive evaluation of 3j symbols. Does minimal error checking on input
+  !     !parameters.
+  !     implicit none
+  !     integer, parameter :: dl = KIND(1.d0)
+  !     integer, intent(in) :: l2in,l3in, m2in,m3in
+  !     real(dl), dimension(*) :: thrcof
+  !     INTEGER, PARAMETER :: i8 = selected_int_kind(18)
+  !     integer(i8) :: l2,l3,m2,m3
+  !     integer(i8) :: l1, m1, l1min,l1max, lmatch, nfin, a1, a2
+
+  !     real(dl) :: newfac, oldfac, sumfor, c1,c2,c1old, dv, denom, x, sum1,sumuni
+  !     real(dl) :: x1,x2,x3, y,y1,y2,y3,sum2,sumbac, ratio,cnorm, sign1, thresh
+  !     integer i,ier, index, nlim, sign2
+  !     integer nfinp1,nfinp2,nfinp3, lstep, nstep2,n
+  !     real(dl), parameter :: zero = 0._dl, one = 1._dl
+  !     real(dl), parameter ::  tiny = 1.0d-30, srtiny=1.0d-15, huge = 1.d30,srhuge = 1.d15
+
+  !     ! routine to generate set of 3j-coeffs (l1,l2,l3\\ m1,m2,m3)
+
+  !     ! by recursion from l1min = max(abs(l2-l3),abs(m1)) 
+  !     !                to l1max = l2+l3
+  !     ! the resulting 3j-coeffs are stored as thrcof(l1-l1min+1)
+
+  !     ! to achieve the numerical stability, the recursion will proceed
+  !     ! simultaneously forwards and backwards, starting from l1min and l1max
+  !     ! respectively.
+  !     !
+  !     ! lmatch is the l1-value at which forward and backward recursion are
+  !     ! matched.
+  !     !
+  !     ! ndim is the length of the array thrcof
+  !     !
+  !     ! ier = -1 for all 3j vanish(l2-abs(m2)<0, l3-abs(m3)<0 or not integer)
+  !     ! ier = -2 if possible 3j's exceed ndim
+  !     ! ier >= 0 otherwise
+
+  !     l2=l2in
+  !     l3=l3in
+  !     m2=m2in
+  !     m3=m3in
+  !     newfac = 0
+  !     lmatch = 0
+  !     m1 = -(m2+m3)
+
+  !     ! check relative magnitude of l and m values
+  !     ier = 0
+
+  !     if (l2 < abs(m2) .or. l3 < m3) then
+  !        ier = -1
+  !        ! call MpiStop('error ier = -1')
+  !        print*, 'error ier = -1',l2,abs(m2),l3,m3
+  !        stop
+  !        return
+  !     end if
+
+  !     ! limits for l1
+  !     l1min = max(abs(l2-l3),abs(m1))
+  !     l1max = l2+l3
+
+  !     if (l1min >= l1max) then
+  !        if (l1min/=l1max) then
+  !           ier = -1
+
+  !           !call MpiStop('error ier = -1')
+  !           print*, 'error ier = -1',l1min,l1max 
+  !           stop
+  !           return
+  !        end if
+
+  !        ! reached if l1 can take only one value, i.e.l1min=l1max
+  !        thrcof(1) = (-1)**abs(l2+m2-l3+m3)/sqrt(real(l1min+l2+l3+1,dl))
+  !        return
+
+  !     end if
+
+  !     nfin = l1max-l1min+1
+
+  !     ! starting forward recursion from l1min taking nstep1 steps
+  !     l1 = l1min
+  !     thrcof(1) = srtiny
+  !     sum1 = (2*l1 + 1)*tiny
+
+  !     lstep = 1
+
+  ! 30  lstep = lstep+1
+  !     l1 = l1+1
+
+  !     oldfac = newfac
+  !     a1 = (l1+l2+l3+1)*(l1-l2+l3)*(l1+l2-l3)
+  !     a2 = (l1+m1)*(l1-m1)*(-l1+l2+l3+1)
+  !     newfac = sqrt(a2*real(a1,dl))
+  !     if (l1 == 1) then
+  !        !IF L1 = 1  (L1-1) HAS TO BE FACTORED OUT OF DV, HENCE
+  !        c1 = -(2*l1-1)*l1*(m3-m2)/newfac
+  !     else
 
-!        dv = -l2*(l2+1)*m1 + l3*(l3+1)*m1 + l1*(l1-1)*(m3-m2)
-!        denom = (l1-1)*newfac
+  !        dv = -l2*(l2+1)*m1 + l3*(l3+1)*m1 + l1*(l1-1)*(m3-m2)
+  !        denom = (l1-1)*newfac
 
-!        if (lstep > 2) c1old = abs(c1)
-!        c1 = -(2*l1-1)*dv/denom
+  !        if (lstep > 2) c1old = abs(c1)
+  !        c1 = -(2*l1-1)*dv/denom
 
-!     end if
+  !     end if
 
-!     if (lstep<= 2) then
+  !     if (lstep<= 2) then
 
-!        ! if l1=l1min+1 the third term in the recursion eqn vanishes, hence
-!        x = srtiny*c1
-!        thrcof(2) = x
-!        sum1 = sum1+tiny*(2*l1+1)*c1*c1
-!        if(lstep==nfin) then
-!           sumuni=sum1
-!           go to 230
-!        end if
-!        goto 30
+  !        ! if l1=l1min+1 the third term in the recursion eqn vanishes, hence
+  !        x = srtiny*c1
+  !        thrcof(2) = x
+  !        sum1 = sum1+tiny*(2*l1+1)*c1*c1
+  !        if(lstep==nfin) then
+  !           sumuni=sum1
+  !           go to 230
+  !        end if
+  !        goto 30
 
-!     end if
+  !     end if
 
-!     c2 = -l1*oldfac/denom
+  !     c2 = -l1*oldfac/denom
 
-!     ! recursion to the next 3j-coeff x  
-!     x = c1*thrcof(lstep-1) + c2*thrcof(lstep-2)
-!     thrcof(lstep) = x
-!     sumfor = sum1
-!     sum1 = sum1 + (2*l1+1)*x*x
-!     if (lstep/=nfin) then
+  !     ! recursion to the next 3j-coeff x  
+  !     x = c1*thrcof(lstep-1) + c2*thrcof(lstep-2)
+  !     thrcof(lstep) = x
+  !     sumfor = sum1
+  !     sum1 = sum1 + (2*l1+1)*x*x
+  !     if (lstep/=nfin) then
 
-!        ! see if last unnormalised 3j-coeff exceeds srhuge
-!        if (abs(x) >= srhuge) then
+  !        ! see if last unnormalised 3j-coeff exceeds srhuge
+  !        if (abs(x) >= srhuge) then
 
-!           ! REACHED IF LAST 3J-COEFFICIENT LARGER THAN SRHUGE
-!           ! SO THAT THE RECURSION SERIES THRCOF(1), ... , THRCOF(LSTEP)
-!           ! HAS TO BE RESCALED TO PREVENT OVERFLOW
+  !           ! REACHED IF LAST 3J-COEFFICIENT LARGER THAN SRHUGE
+  !           ! SO THAT THE RECURSION SERIES THRCOF(1), ... , THRCOF(LSTEP)
+  !           ! HAS TO BE RESCALED TO PREVENT OVERFLOW
 
-!           ier = ier+1
-!           do i = 1, lstep
-!              if (abs(thrcof(i)) < srtiny) thrcof(i)= zero
-!              thrcof(i) = thrcof(i)/srhuge
-!           end do
+  !           ier = ier+1
+  !           do i = 1, lstep
+  !              if (abs(thrcof(i)) < srtiny) thrcof(i)= zero
+  !              thrcof(i) = thrcof(i)/srhuge
+  !           end do
 
-!           sum1 = sum1/huge
-!           sumfor = sumfor/huge
-!           x = x/srhuge
+  !           sum1 = sum1/huge
+  !           sumfor = sumfor/huge
+  !           x = x/srhuge
 
-!        end if
+  !        end if
 
-!        ! as long as abs(c1) is decreasing, the recursion proceeds towards
-!        ! increasing
-!        ! 3j-valuse and so is numerically stable. Once an increase of abs(c1) is 
-!        ! detected, the recursion direction is reversed.
+  !        ! as long as abs(c1) is decreasing, the recursion proceeds towards
+  !        ! increasing
+  !        ! 3j-valuse and so is numerically stable. Once an increase of abs(c1) is 
+  !        ! detected, the recursion direction is reversed.
 
-!        if (c1old > abs(c1)) goto 30
+  !        if (c1old > abs(c1)) goto 30
 
-!     end if !lstep/=nfin
+  !     end if !lstep/=nfin
 
-!     ! keep three 3j-coeffs around lmatch for comparison with backward recursion
+  !     ! keep three 3j-coeffs around lmatch for comparison with backward recursion
 
-!     lmatch = l1-1
-!     x1 = x
-!     x2 = thrcof(lstep-1)
-!     x3 = thrcof(lstep-2)
-!     nstep2 = nfin-lstep+3
+  !     lmatch = l1-1
+  !     x1 = x
+  !     x2 = thrcof(lstep-1)
+  !     x3 = thrcof(lstep-2)
+  !     nstep2 = nfin-lstep+3
 
-!     ! --------------------------------------------------------------------------
-!     !
-!     ! starting backward recursion from l1max taking nstep2 stpes, so that
-!     ! forward and backward recursion overlap at 3 points 
-!     ! l1 = lmatch-1, lmatch, lmatch+1
+  !     ! --------------------------------------------------------------------------
+  !     !
+  !     ! starting backward recursion from l1max taking nstep2 stpes, so that
+  !     ! forward and backward recursion overlap at 3 points 
+  !     ! l1 = lmatch-1, lmatch, lmatch+1
 
-!     nfinp1 = nfin+1
-!     nfinp2 = nfin+2
-!     nfinp3 = nfin+3
-!     l1 = l1max
-!     thrcof(nfin) = srtiny
-!     sum2 = tiny*(2*l1+1)
+  !     nfinp1 = nfin+1
+  !     nfinp2 = nfin+2
+  !     nfinp3 = nfin+3
+  !     l1 = l1max
+  !     thrcof(nfin) = srtiny
+  !     sum2 = tiny*(2*l1+1)
 
-!     l1 = l1+2
-!     lstep=1
+  !     l1 = l1+2
+  !     lstep=1
 
-!     do
-!        lstep = lstep + 1
-!        l1= l1-1
+  !     do
+  !        lstep = lstep + 1
+  !        l1= l1-1
 
-!        oldfac = newfac
-!        a1 = (l1+l2+l3)*(l1-l2+l3-1)*(l1+l2-l3-1)
-!        a2 = (l1+m1-1)*(l1-m1-1)*(-l1+l2+l3+2)
-!        newfac = sqrt(a1*real(a2,dl))
+  !        oldfac = newfac
+  !        a1 = (l1+l2+l3)*(l1-l2+l3-1)*(l1+l2-l3-1)
+  !        a2 = (l1+m1-1)*(l1-m1-1)*(-l1+l2+l3+2)
+  !        newfac = sqrt(a1*real(a2,dl))
 
-!        dv = -l2*(l2+1)*m1 + l3*(l3+1)*m1 +l1*(l1-1)*(m3-m2)
+  !        dv = -l2*(l2+1)*m1 + l3*(l3+1)*m1 +l1*(l1-1)*(m3-m2)
 
-!        denom = l1*newfac
-!        c1 = -(2*l1-1)*dv/denom
-!        if (lstep <= 2) then
+  !        denom = l1*newfac
+  !        c1 = -(2*l1-1)*dv/denom
+  !        if (lstep <= 2) then
 
-!           ! if l2=l2max+1, the third term in the recursion vanishes
+  !           ! if l2=l2max+1, the third term in the recursion vanishes
 
-!           y = srtiny*c1
-!           thrcof(nfin-1) = y
-!           sumbac = sum2
-!           sum2 = sum2 + tiny*(2*l1-3)*c1*c1
+  !           y = srtiny*c1
+  !           thrcof(nfin-1) = y
+  !           sumbac = sum2
+  !           sum2 = sum2 + tiny*(2*l1-3)*c1*c1
 
-!           cycle
+  !           cycle
 
-!        end if
+  !        end if
 
-!        c2 = -(l1-1)*oldfac/denom
+  !        c2 = -(l1-1)*oldfac/denom
 
-!        ! recursion to the next 3j-coeff y
-!        y = c1*thrcof(nfinp2-lstep)+c2*thrcof(nfinp3-lstep)
+  !        ! recursion to the next 3j-coeff y
+  !        y = c1*thrcof(nfinp2-lstep)+c2*thrcof(nfinp3-lstep)
 
-!        if (lstep==nstep2) exit
+  !        if (lstep==nstep2) exit
 
-!        thrcof(nfinp1-lstep) = y
-!        sumbac = sum2
-!        sum2 = sum2+(2*l1-3)*y*y
+  !        thrcof(nfinp1-lstep) = y
+  !        sumbac = sum2
+  !        sum2 = sum2+(2*l1-3)*y*y
 
-!        ! see if last unnormalised 3j-coeff exceeds srhuge
-!        if (abs(y) >= srhuge) then
+  !        ! see if last unnormalised 3j-coeff exceeds srhuge
+  !        if (abs(y) >= srhuge) then
 
-!           ! reached if 3j-coeff larger than srhuge so that the recursion series
-!           ! thrcof(nfin),..., thrcof(nfin-lstep+1) has to be rescaled to prevent
-!           ! overflow
+  !           ! reached if 3j-coeff larger than srhuge so that the recursion series
+  !           ! thrcof(nfin),..., thrcof(nfin-lstep+1) has to be rescaled to prevent
+  !           ! overflow
 
-!           ier=ier+1
-!           do i = 1, lstep
-!              index=nfin-i+1
-!              if (abs(thrcof(index)) < srtiny) thrcof(index)=zero
-!              thrcof(index) = thrcof(index)/srhuge
-!           end do
+  !           ier=ier+1
+  !           do i = 1, lstep
+  !              index=nfin-i+1
+  !              if (abs(thrcof(index)) < srtiny) thrcof(index)=zero
+  !              thrcof(index) = thrcof(index)/srhuge
+  !           end do
 
-!           sum2=sum2/huge
-!           sumbac=sumbac/huge
+  !           sum2=sum2/huge
+  !           sumbac=sumbac/huge
 
-!        end if
+  !        end if
 
-!     end do
+  !     end do
 
-!     ! the forward recursion 3j-coeffs x1, x2, x3 are to be matched with the 
-!     ! corresponding backward recursion vals y1, y2, y3
+  !     ! the forward recursion 3j-coeffs x1, x2, x3 are to be matched with the 
+  !     ! corresponding backward recursion vals y1, y2, y3
 
-!     y3 = y
-!     y2 = thrcof(nfinp2-lstep)
-!     y1 = thrcof(nfinp3-lstep)
+  !     y3 = y
+  !     y2 = thrcof(nfinp2-lstep)
+  !     y1 = thrcof(nfinp3-lstep)
 
-!     ! determine now ratio such that yi=ratio*xi (i=1,2,3) holds with minimal
-!     ! error
+  !     ! determine now ratio such that yi=ratio*xi (i=1,2,3) holds with minimal
+  !     ! error
 
-!     ratio = (x1*y1+x2*y2+x3*y3)/(x1*x1+x2*x2+x3*x3)
-!     nlim = nfin-nstep2+1
+  !     ratio = (x1*y1+x2*y2+x3*y3)/(x1*x1+x2*x2+x3*x3)
+  !     nlim = nfin-nstep2+1
 
-!     if (abs(ratio) >= 1) then
+  !     if (abs(ratio) >= 1) then
 
-!        thrcof(1:nlim) = ratio*thrcof(1:nlim) 
-!        sumuni = ratio*ratio*sumfor + sumbac
+  !        thrcof(1:nlim) = ratio*thrcof(1:nlim) 
+  !        sumuni = ratio*ratio*sumfor + sumbac
 
-!     else
+  !     else
 
-!        nlim = nlim+1
-!        ratio = 1/ratio
-!        do n = nlim, nfin
-!           thrcof(n) = ratio*thrcof(n)
-!        end do
-!        sumuni = sumfor + ratio*ratio*sumbac
+  !        nlim = nlim+1
+  !        ratio = 1/ratio
+  !        do n = nlim, nfin
+  !           thrcof(n) = ratio*thrcof(n)
+  !        end do
+  !        sumuni = sumfor + ratio*ratio*sumbac
 
-!     end if
-!     ! normalise 3j-coeffs
+  !     end if
+  !     ! normalise 3j-coeffs
 
-! 230 cnorm = 1/sqrt(sumuni)
+  ! 230 cnorm = 1/sqrt(sumuni)
 
-!     ! sign convention for last 3j-coeff determines overall phase
+  !     ! sign convention for last 3j-coeff determines overall phase
 
-!     sign1 = sign(one,thrcof(nfin))
-!     sign2 = (-1)**(abs(l2+m2-l3+m3))
-!     if (sign1*sign2 <= 0) then
-!        cnorm = -cnorm
-!     end if
-!     if (abs(cnorm) >= one) then
-!        thrcof(1:nfin) = cnorm*thrcof(1:nfin)
-!        return
-!     end if
+  !     sign1 = sign(one,thrcof(nfin))
+  !     sign2 = (-1)**(abs(l2+m2-l3+m3))
+  !     if (sign1*sign2 <= 0) then
+  !        cnorm = -cnorm
+  !     end if
+  !     if (abs(cnorm) >= one) then
+  !        thrcof(1:nfin) = cnorm*thrcof(1:nfin)
+  !        return
+  !     end if
 
-!     thresh = tiny/abs(cnorm)
+  !     thresh = tiny/abs(cnorm)
 
-!     do n = 1, nfin
-!        if (abs(thrcof(n)) < thresh) thrcof(n) = zero
-!        thrcof(n) = cnorm*thrcof(n)
-!     end do
-!     return 
+  !     do n = 1, nfin
+  !        if (abs(thrcof(n)) < thresh) thrcof(n) = zero
+  !        thrcof(n) = cnorm*thrcof(n)
+  !     end do
+  !     return 
 
-!   end subroutine GetThreeJs
+  !   end subroutine GetThreeJs
 
 
 
