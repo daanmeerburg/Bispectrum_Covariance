@@ -48,7 +48,7 @@ program bisvar
 
 
   shape = 1
-  minfields = 1
+  minfields = 2
   nfields = 2
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
@@ -125,7 +125,7 @@ program bisvar
   !Will:
   tensDir = TRIM(tensDir)//'/Data/alphaBetaDir/'
   !Daan:
-  !tensDir = '/mnt/raid-cita/meerburg/SO_forecasts/alphabeta'
+  tensDir = '/mnt/raid-cita/meerburg/SO_forecasts/alphabeta'
   write(*,*) tensDir      
   !allocate and read bessel transforms
   !you should check the subroutine to see if your file is directed correctly
@@ -170,18 +170,23 @@ program bisvar
      pClpp(1,j) = 2.*pi*pClpp(1,j)/(l1*(l1+1.))**2
      pClpp(2:3,j) = 2.*pi*pClpp(2:3,j)/(l1*(l1+1.))**(3.d0/2.d0)/CMB2COBEnorm**(1./2)
 
-    detCovCV = (Cll(1,j)*Cll(2,j)-Cll(4,j)**2) 
-    !inverse covariance in CV limit 
-    invCll(1,1,j) = Cll(2,j)/detCovCV
-    invCll(1,2,j) = -Cll(4,j)/detCovCV
-    invCll(2,1,j) = -Cll(4,j)/detCovCV
-    invCll(2,2,j) = Cll(1,j)/detCovCV
+     detCovCV = (Cll(1,j)*Cll(2,j)-Cll(4,j)**2) 
+     !inverse covariance in CV limit
+     if (nfields .eq. 1) then
+        invCll(1,1,j) = 1.d0/Cll(1,j)
+     elseif (minfields .eq. 2) then
+        invCll(2,2,j) = 1.d0/Cll(2,j)
+     else
+        invCll(1,1,j) = Cll(2,j)/detCovCV
+        invCll(1,2,j) = -Cll(4,j)/detCovCV
+        invCll(2,1,j) = -Cll(4,j)/detCovCV
+        invCll(2,2,j) = Cll(1,j)/detCovCV
+     endif
 
-
-    Cllm(1,1,j) = Cll(1,j)!/detCovCV
-    Cllm(1,2,j) = Cll(4,j)!/detCovCV
-    Cllm(2,1,j) = Cll(4,j)!/detCovCV
-    Cllm(2,2,j) = Cll(2,j)!/detCovCV
+     Cllm(1,1,j) = Cll(1,j)!/detCovCV
+     Cllm(1,2,j) = Cll(4,j)!/detCovCV
+     Cllm(2,1,j) = Cll(4,j)!/detCovCV
+     Cllm(2,2,j) = Cll(2,j)!/detCovCV
 
 
      !write(*,*) l1,Cll(1:4,j) 
@@ -189,7 +194,7 @@ program bisvar
   close(17)
   close(18)
 
-  intmax = 140
+  intmax = 39
   lmax = ellar(intmax)
   !lmax = 2000
   lmin = 2
@@ -202,13 +207,13 @@ program bisvar
 
 
 
-  open(unit=12,file='BispectrumCovariance_local_binned_1.0.dat', status = 'replace')
+  open(unit=12,file='BispectrumCovariance_local_Pol_3.0.dat', status = 'replace')
   !want to use analytical approximation of wigner3J (slightly faster)
   AWigner = .True.
-  
+
   !if(want_ISW_correction) then   
 
-  do j = 200, 1000, 400
+  do j = 400, 3000, 800
      TotSumCV = 0.d0
      TotSumCVISWLens = 0.d0
      TotSumCVLensCross = 0.d0
@@ -230,10 +235,10 @@ program bisvar
            end if
            max_l = min(j,l1+l2)
 
-           bis = 0
-           bis_ISWlens = 0
-           bispectrum = 0
-           bispectrum_ISWlens = 0
+           bis = 0.d0
+           bis_ISWlens = 0.d0
+           bispectrum = 0.d0
+           bispectrum_ISWlens = 0.d0
            call get_bispectrum_sss(P,l1,l2,2,j,shape,nfields,bis)
            call get_bispectrum_sss(P_ISWlens,l1,l2,2,j,5,nfields,bis_ISWlens)
            call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
@@ -242,22 +247,22 @@ program bisvar
            do l3=min_l,max_l, 2 !sum has to be even
               tmpPrefac = (atj(l3)*prefactor(l1,l2,l3)*.5)**2/tr(l1,l2,l3)
               do m2  = minfields,nfields !T,E (8 terms only)
-                do p2 = minfields,nfields !T,E
-                  do q2 = minfields,nfields !T,E
-                    do m1  = minfields,nfields !T,E (8 terms only)
-                      do p1 = minfields,nfields !T,E
-                        do q1 = minfields,nfields !T,E
-                          TotSumCVLensCross = TotSumCVLensCross+bispectrum_ISWlens(m1,p1,q1,1,l3)*invCll(m1,m2,l1)* &
-                          invCll(p1,p2,l2)*invCll(q1,q2,l3)*bispectrum(m2,p2,q2,1,l3)*tmpPrefac
-                          TotSumCVISWLens = TotSumCVISWLens+bispectrum_ISWlens(m1,p1,q1,1,l3)*invCll(m1,m2,l1)* &
-                          invCll(p1,p2,l2)*invCll(q1,q2,l3)*bispectrum_ISWlens(m2,p2,q2,1,l3)*tmpPrefac
-                          TotSumCV = TotSumCV +bispectrum(m1,p1,q1,1,l3)*invCll(m1,m2,l1)* &
-                          invCll(p1,p2,l2)*invCll(q1,q2,l3)*bispectrum(m2,p2,q2,1,l3)*tmpPrefac
-                        enddo
-                      enddo
+                 do p2 = minfields,nfields !T,E
+                    do q2 = minfields,nfields !T,E
+                       do m1  = minfields,nfields !T,E (8 terms only)
+                          do p1 = minfields,nfields !T,E
+                             do q1 = minfields,nfields !T,E
+                                TotSumCVLensCross = TotSumCVLensCross+bispectrum_ISWlens(m1,p1,q1,1,l3)*invCll(m1,m2,l1)* &
+                                     invCll(p1,p2,l2)*invCll(q1,q2,l3)*bispectrum(m2,p2,q2,1,l3)*tmpPrefac
+                                TotSumCVISWLens = TotSumCVISWLens+bispectrum_ISWlens(m1,p1,q1,1,l3)*invCll(m1,m2,l1)* &
+                                     invCll(p1,p2,l2)*invCll(q1,q2,l3)*bispectrum_ISWlens(m2,p2,q2,1,l3)*tmpPrefac
+                                TotSumCV = TotSumCV +bispectrum(m1,p1,q1,1,l3)*invCll(m1,m2,l1)* &
+                                     invCll(p1,p2,l2)*invCll(q1,q2,l3)*bispectrum(m2,p2,q2,1,l3)*tmpPrefac
+                             enddo
+                          enddo
+                       enddo
                     enddo
-                  enddo
-                enddo
+                 enddo
               enddo
 
               !signal squared (in SW limit) 
@@ -330,9 +335,11 @@ program bisvar
         allocate(bispectrum_ISWlens(nfields,nfields,nfields,j,j))
         allocate(bis(nfields**3,j))
         allocate(bis_ISWlens(nfields**3,j))
-        a3joC(:,:) = 0
+        a3joC(:,:) = 0.d0
+        bispectrum(:,:,:,:,:) = 0.d0
+        bispectrum_ISWlens(:,:,:,:,:) =0.d0
         do l2 = lmin, j
-           bis = 0
+           bis = 0.d0
            call get_bispectrum_sss(P,l1,l2,2,j,shape,nfields,bis)
            ! bispectrum(1,1,1,l2,:) = bis(1,:)*.5 ! .5 for account for 2 in prefactor
            call reshapeBispectrum(bis*.5,bispectrum,l2,minfields,nfields)
@@ -343,10 +350,12 @@ program bisvar
            min_l = max(abs(l1-l2),lmin) 
            max_l = min(j,l1+l2)
            do l3=min_l,max_l,2 !sum has to be even
-              call applyInvC(bispectrum(:,:,:,l2,l3),invCll(:,:,l1),invCll(:,:,l2),invCll(:,:,l3),minfields,nfields)
-              call applyInvC(bispectrum_ISWlens(:,:,:,l2,l3),invCll(:,:,l1),invCll(:,:,l2),invCll(:,:,l3),minfields,nfields)
-          enddo
-          ! write(*,*),bispectrum_ISWlens(1,1,1,l2,l3),bispectrum_ISWlens(1,1,1,l3,l2)
+              !write(*,'(3I4,2E18.7)') l1,l2,l3,bispectrum(1,1,1,l2,l3),bispectrum(2,2,2,l2,l3)
+              call applyInvC(bispectrum,invCll,minfields,nfields, l1,l2,l3)
+              call applyInvC(bispectrum_ISWlens,invCll,minfields,nfields,l1,l2,l3)
+              !write(*,'(3I4,2E18.7)') l1,l2,l3,bispectrum(1,1,1,l2,l3),bispectrum(2,2,2,l2,l3)
+           enddo
+           ! write(*,*),bispectrum_ISWlens(1,1,1,l2,l3),bispectrum_ISWlens(1,1,1,l3,l2)
 
            ! bispectrum_ISWlens(1,l2,:) = bis_ISWlens(1,:)*.5 ! .5 for account for 2 in prefactor
 
@@ -364,11 +373,13 @@ program bisvar
               call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,0)
               a3j(l2,1:2*j) = atj(1:2*j)
            endif
-          
+
            if (nfields .gt. 1) then
-             call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,-2)
-             a3joC(l2,1:2*j) = atj(1:2*j)
-          endif
+              call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,-2)
+              a3joC(l2,1:2*j) = atj(1:2*j)
+              !write(*,*)  a3joC(l2,1:2*j)
+              !a3joC(l2,1:2*j) = a3j(l2,1:2*j)
+           endif
         enddo
         do l2 = lmin, j
            max_l = min(j,l1+l2)
@@ -439,39 +450,43 @@ program bisvar
                     tempfac = 4.0*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*9.d0*pClpp(1,l1)/36.
                     tempfacFcM(1,1) = a3j(l2,l3)*a3j(l2b,l3b)*tempfac
                     if (nfields .gt. 1) then
-                      tempfacFcM(2,1) = a3joC(l2,l3)*a3j(l2b,l3b)*tempfac
-                      tempfacFcM(1,2) = a3j(l2,l3)*a3joC(l2b,l3b)*tempfac
-                      tempfacFcM(2,2) = a3joC(l2,l3)*a3joC(l2b,l3b)*tempfac
+                       tempfacFcM(2,1) = a3joC(l2,l3)*a3j(l2b,l3b)*tempfac
+                       tempfacFcM(1,2) = a3j(l2,l3)*a3joC(l2b,l3b)*tempfac
+                       tempfacFcM(2,2) = a3joC(l2,l3)*a3joC(l2b,l3b)*tempfac
+                       !write(*,*) tempfacFcM(2,2)
                     endif
                     DSNonGauss = 0.d0
                     DSNGauss = 0.d0
 
                     tempfac = a3j(l2,l3)*prefactor(l1,l2,l3)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
                     do m2  = minfields,nfields !T,E (8 terms only)
-                      do p2 = minfields,nfields !T,E
-                        do q2 = minfields,nfields !T,E
-                          do m1  = minfields,nfields !T,E (8 terms only)
-                            do p1 = minfields,nfields !T,E
-                              do q1 = minfields,nfields !T,E
-                                  DB = Cllm(m1,m2,l1)*Cllm(p1,q1,l2)*Cllm(p2,q2,l2b)*tempfacFcM(q1,q2)
-                                  fnlISW = bispectrum_ISWlens(m1,p1,q1,l2,l3)
-                                  fnlISWb = bispectrum_ISWlens(m2,p2,q2,l2b,l3b)
-                                  fnl = bispectrum(m1,p1,q1,l2,l3)
-                                  fnlb = bispectrum(m2,p2,q2,l2b,l3b)
-                                  sigsq = tempfac*( alpha**2*fnl*fnlb &
-                                       + alpha*beta*fnl*fnlISWb + alpha*beta*fnlb*fnlISW + beta**2*fnlISW*fnlISWb)
-                                  !endif
-                                  if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
-                                    DSNGauss = sigsq*Cllm(m1,m2,l1)*Cllm(p1,q1,l2)*Cllm(p2,q2,l3)
-                                  endif
-                                  !delta (N)^2 . nine possible permutations of the first index
-                                  DSNonGauss = DSNonGauss+ sigsq*DB!*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
-                                  !l3b = l3                                  
-                              enddo
-                            enddo
+                       do p2 = minfields,nfields !T,E
+                          do q2 = minfields,nfields !T,E
+                             do m1  = minfields,nfields !T,E (8 terms only)
+                                do p1 = minfields,nfields !T,E
+                                   do q1 = minfields,nfields !T,E
+                                      DB = Cllm(m1,m2,l1)*Cllm(p1,q1,l2)*Cllm(p2,q2,l2b)*tempfacFcM(q1,q2)
+                                      fnlISW = bispectrum_ISWlens(m1,p1,q1,l2,l3)
+                                      fnlISWb = bispectrum_ISWlens(m2,p2,q2,l2b,l3b)
+                                      fnl = bispectrum(m1,p1,q1,l2,l3)
+                                      fnlb = bispectrum(m2,p2,q2,l2b,l3b)
+
+                                      write(*,*) bispectrum(2,2,2,l2,l3),bispectrum(1,1,1,l2,l3)
+                                      sigsq = tempfac*( alpha**2*fnl*fnlb &
+                                           + alpha*beta*fnl*fnlISWb + alpha*beta*fnlb*fnlISW + beta**2*fnlISW*fnlISWb)
+                                      !write(*,*) sigsq
+                                      !endif
+                                      if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
+                                         DSNGauss = sigsq*Cllm(m1,m2,l1)*Cllm(p1,p2,l2)*Cllm(q1,q2,l3)
+                                      endif
+                                      !delta (N)^2 . nine possible permutations of the first index
+                                      DSNonGauss = DSNonGauss+ sigsq*DB!*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                                      !l3b = l3                                  
+                                   enddo
+                                enddo
+                             enddo
                           enddo
-                        enddo
-                      enddo
+                       enddo
                     enddo
 
 
@@ -548,23 +563,21 @@ contains
   subroutine reshapeBispectrum(bis,bispectrum,l2,minfields,nfields)
     real(dl), intent(in) :: bis(:,:)
     integer, intent(in) :: nfields,minfields
-    real(dl), intent(out) :: bispectrum(:,:,:,:,:)
-    integer l2
+    real(dl) :: bispectrum(:,:,:,:,:)
+    integer ::  l2
     if (nfields .eq. 1) then
-      if (minfields .eq.1) then
-        bispectrum(1,1,1,l2,:) = bis(1,:)
-      else
-        bispectrum(2,2,2,l2,:) = bis(8,:)
-      endif
+       bispectrum(1,1,1,l2,:) = bis(1,:)
+    elseif (minfields .eq. 2) then
+       bispectrum(2,2,2,l2,:) = bis(8,:)
     else
-      bispectrum(1,1,1,l2,:) = bis(1,:)
-      bispectrum(1,1,2,l2,:) = bis(2,:)
-      bispectrum(1,2,1,l2,:) = bis(3,:)
-      bispectrum(1,2,2,l2,:) = bis(4,:)
-      bispectrum(2,1,1,l2,:) = bis(5,:)
-      bispectrum(2,1,2,l2,:) = bis(6,:)
-      bispectrum(2,2,1,l2,:) = bis(7,:)
-      bispectrum(2,2,2,l2,:) = bis(8,:)
+       bispectrum(1,1,1,l2,:) = bis(1,:)
+       bispectrum(1,1,2,l2,:) = bis(2,:)
+       bispectrum(1,2,1,l2,:) = bis(3,:)
+       bispectrum(1,2,2,l2,:) = bis(4,:)
+       bispectrum(2,1,1,l2,:) = bis(5,:)
+       bispectrum(2,1,2,l2,:) = bis(6,:)
+       bispectrum(2,2,1,l2,:) = bis(7,:)
+       bispectrum(2,2,2,l2,:) = bis(8,:)
     endif
   end subroutine reshapeBispectrum
 
@@ -572,44 +585,43 @@ contains
     real(dl), intent(out) :: bispectrum(:,:,:,:,:)
     integer l2,l3,nfields,minfields
     if (nfields .eq. 1) then
-        if (minfields .eq. 1) then
-          bispectrum(1,1,1,l3,l2) = bispectrum(1,1,1,l2,l3)
-        else
-          bispectrum(2,2,2,l3,l2) = bispectrum(2,2,2,l2,l3)
-        endif
+       bispectrum(1,1,1,l3,l2) = bispectrum(1,1,1,l2,l3)
+    elseif (minfields .eq. 2) then
+       bispectrum(2,2,2,l3,l2) = bispectrum(2,2,2,l2,l3)
     else
-        bispectrum(1,1,1,l3,l2) = bispectrum(1,1,1,l2,l3)
-        bispectrum(1,2,1,l3,l2) = bispectrum(1,1,2,l2,l3)
-        bispectrum(1,1,2,l3,l2) = bispectrum(1,2,1,l2,l3)
-        bispectrum(2,1,1,l3,l2) = bispectrum(2,1,1,l2,l3)
-        bispectrum(2,1,2,l3,l2) = bispectrum(2,2,1,l2,l3)
-        bispectrum(2,2,1,l3,l2) = bispectrum(2,1,2,l2,l3)
-        bispectrum(1,2,2,l3,l2) = bispectrum(1,2,2,l2,l3)
-        bispectrum(2,2,2,l3,l2) = bispectrum(2,2,2,l2,l3)
+       bispectrum(1,1,1,l3,l2) = bispectrum(1,1,1,l2,l3)
+       bispectrum(1,2,1,l3,l2) = bispectrum(1,1,2,l2,l3)
+       bispectrum(1,1,2,l3,l2) = bispectrum(1,2,1,l2,l3)
+       bispectrum(2,1,1,l3,l2) = bispectrum(2,1,1,l2,l3)
+       bispectrum(2,1,2,l3,l2) = bispectrum(2,2,1,l2,l3)
+       bispectrum(2,2,1,l3,l2) = bispectrum(2,1,2,l2,l3)
+       bispectrum(1,2,2,l3,l2) = bispectrum(1,2,2,l2,l3)
+       bispectrum(2,2,2,l3,l2) = bispectrum(2,2,2,l2,l3)
     endif
   end subroutine permuteBis
 
-  subroutine applyInvC(bispectrum,invCl_l1,invCl_l2,invCl_l3,minfields,nfields)
-    real(dl), intent(inout) :: bispectrum(:,:,:)
-    real(dl), intent(in):: invCl_l1(:,:),invCl_l2(:,:),invCl_l3(:,:)
+  subroutine applyInvC(bispectrum,invCl,minfields,nfields,l1,l2,l3)
+    real(dl), intent(inout) :: bispectrum(:,:,:,:,:)
+    real(dl), intent(in):: invCl(:,:,:)
     integer, intent(in):: nfields,minfields
-    integer m1,m2,p1,p2,q1,q2
-    real(dl) tmpBis(minfields:nfields,minfields:nfields,minfields:nfields)
+    integer, intent(in) :: l1,l2,l3
+    integer :: m1,m2,p1,p2,q1,q2
+    real(dl) :: tmpBis(minfields:nfields,minfields:nfields,minfields:nfields)
     tmpBis(:,:,:) = 0
     do m1 = minfields,nfields
-      do m2 = minfields,nfields
-        do p1 = minfields,nfields
-          do p2 = minfields,nfields
-            do q1 = minfields,nfields
-              do q2 = minfields,nfields
-                tmpBis(q1,p1,m1) = tmpBis(q1,p1,m1) +invCl_l1(q1,q2)*invCl_l2(p1,p2)*invCl_l3(m1,m2)*bispectrum(q2,p2,m2)
-              enddo
-            enddo
+       do m2 = minfields,nfields
+          do p1 = minfields,nfields
+             do p2 = minfields,nfields
+                do q1 = minfields,nfields
+                   do q2 = minfields,nfields
+                      tmpBis(q1,p1,m1) = tmpBis(q1,p1,m1) +invCl(q1,q2,l1)*invCl(p1,p2,l2)*invCl(m1,m2,l3)*bispectrum(q2,p2,m2,l2,l3)
+                   enddo
+                enddo
+             enddo
           enddo
-        enddo
-      enddo
+       enddo
     enddo
-    bispectrum(:,:,:) = tmpBis(:,:,:)
+    bispectrum(:,:,:,l2,l3) = tmpBis(:,:,:)
   end subroutine applyInvC
 
   ! real(dl) function floc(l1,l2,l3)
