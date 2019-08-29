@@ -46,11 +46,11 @@ program bisvar
   integer ::  shape,nfields
   character(120) :: alphabetafile, alphabetaPolfile,tensDir
 
-  shape = 1
+  shape = 3
   nfields = 1
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
-  want_ISW_correction = .true. 
+  want_ISW_correction = .false. 
 
   !various binning schemes
 !!$  do i  = 1, 256
@@ -85,16 +85,16 @@ program bisvar
      endif
      !write(*,*) 'ell:', ellar(i)
   enddo
-  do i  = 1, 512
-     if (i .le. 399) then
-        ellar(i) = i + 1
-        dellar(i) = 1.d0
-     else
-        ellar(i)  = ellar(i-1) + 2
-        dellar(i) = 2.d0
-     endif
-     !write(*,*) 'ell:', ellar(i)
-  enddo
+!!$  do i  = 1, 512
+!!$     if (i .le. 399) then
+!!$        ellar(i) = i + 1
+!!$        dellar(i) = 1.d0
+!!$     else
+!!$        ellar(i)  = ellar(i-1) + 2
+!!$        dellar(i) = 2.d0
+!!$     endif
+!!$     !write(*,*) 'ell:', ellar(i)
+!!$  enddo
   !stop
   !∆`=  1  for`≤50,  ∆`=  4  for50< `≤200,  ∆`=  12  for  200< `≤500,  ∆`=  24for 500< `≤2000,  and finally ∆`= 40 for` >2000       
 
@@ -170,8 +170,8 @@ program bisvar
   close(17)
   close(18)
 
-  intmax = 39
-  !lmax = ellar(intmax)
+  intmax = 140
+  lmax = ellar(intmax)
   !lmax = 2000
   lmin = 2
 
@@ -183,12 +183,12 @@ program bisvar
 
 
 
-  open(unit=12,file='BispectrumCovariance_ISWmarg_1.0.dat', status = 'replace')
+  open(unit=12,file='BispectrumCovariance_local_binned_1.0.dat', status = 'replace')
   !want to use analytical approximation of wigner3J (slightly faster)
   AWigner = .True.
   
   !if(want_ISW_correction) then   
-  do j = 600, 4000, 200
+  do j = 1500, 1500, 200
      TotSumCV = 0.d0
      TotSumCVISWLens = 0.d0
      TotSumCVLensCross = 0.d0
@@ -325,7 +325,7 @@ program bisvar
         !do j = 1, intmax !l2 loop
 
         !$OMP PARALLEL DO DEFAUlT(SHARED),SCHEDULE(dynamic) &
-        !$OMP PRIVATE(l2,l3,l2b,l3b,min_l,max_l,min_lb,max_lb,DB,i), &
+        !$OMP PRIVATE(l2,l3,l2b,l3b,min_l,max_l,min_lb,max_lb,DB), &
         !$OMP PRIVATE(DSNGauss,DSNonGauss,sigsq,fnl,fnlb,fnlISW,fnlISWb,atj,atj2,tempfac),&
         !$OMP REDUCTION(+:TotSumNGauss,TotSumGauss,SumGauss, SumNGauss, TotNoise)
         do l2 = lmin, j
@@ -385,11 +385,11 @@ program bisvar
                     !endif
 
                     !delta (N)^2 . nine possible permutations of the first index
-                    DSNonGauss = 9.d0*pClpp(1,l1)/Cll(1,l1)*sigsq*DB/36.!*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
+                    DSNonGauss = 9.d0*pClpp(1,l1)/Cll(1,l1)*sigsq*DB/36.*dellar(i)!*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
                     !l3b = l3
                     if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
                        !<S>  replaced Cll with Cl. Differene is too large for just being lensed versus unlensed 
-                       DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)/6.!*dellar(j)/6.!tr(l1,l2,l3)
+                       DSNGauss = sigsq/Cll(1,l1)/Cll(1,l2)/Cll(1,l3)/6.*dellar(i) !/6.!tr(l1,l2,l3)
                        !<N^2> + delta <N^2>
                        TotNoise = TotNoise + DSNGauss + DSNonGauss
                        TotSumGauss = TotSumGauss + DSNGauss
