@@ -46,14 +46,10 @@ program bisvar
   integer ::  shape,nfields,minfields
   character(120) :: alphabetafile, alphabetaPolfile,tensDir
 
-<<<<<<< HEAD
-  shape = 3
-  nfields = 1
-=======
+
   shape = 1
   minfields = 1
   nfields = 2
->>>>>>> 9acdc2f6343bbf01c1695b3c91887e9582af629c
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
   want_ISW_correction = .false. 
