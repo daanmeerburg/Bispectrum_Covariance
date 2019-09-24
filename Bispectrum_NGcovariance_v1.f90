@@ -37,7 +37,7 @@ program bisvar
   integer :: testl = 70
   integer :: ellar(512)
   real(dl):: dellar(512)  !multiples of 32
-  integer :: intmax
+  integer :: intmax, imin
   logical :: want_ISW_correction = .false.
 
   real(dl) ::stepsum, DBx
@@ -48,8 +48,8 @@ program bisvar
 
 
   shape = 1
-  minfields = 2
-  nfields = 2
+  minfields = 1
+  nfields = 1
 
   !you can see the effect of removing ISW-lensing helps in reducing the extra covariance 
   want_ISW_correction = .false. 
@@ -102,13 +102,18 @@ program bisvar
 
   !this is for reading in the files
   lmax = 5000
-
   lmin = 2
-  allocate(Cl(4,2:lmax))
-  allocate(Cll(4,2:lmax))
-  allocate(invCll(2,2,2:lmax))
-  allocate(Cllm(2,2,2:lmax))
-  allocate(pClpp(3,2:lmax))
+  
+  allocate(Cl(4,lmax))
+  Cl(:,:) = 0.d0
+  allocate(Cll(4,lmax))
+  Cll(:,:) = 0.d0
+  allocate(invCll(2,2,lmax))
+  invCll(:,:,:) = 0.d0
+  allocate(Cllm(2,2,lmax))
+  Cllm(:,:,:) = 0.d0
+  allocate(pClpp(3,lmax))
+  pClpp(:,:) = 0.d0
 
   Folder1 = 'SOspectra/'
   Clfile = trim(Folder1)//trim('SOspectra_lenspotentialCls.dat')
@@ -194,26 +199,28 @@ program bisvar
   close(17)
   close(18)
 
-  intmax = 39
+  intmax = 39 !lmax  = 40, intmax = 60, lmax = 100
+
+  imin = 1
   lmax = ellar(intmax)
+  lmin = ellar(imin)
   !lmax = 2000
-  lmin = 2
+  !lmin = 2
 
   write(*,*) 'lmin:', lmin
-  write(*,*) 'lmax:', lmax
+  write(*,*) 'l1-lmax:', lmax
 
   !setting everything to zero:
 
+  
 
-
-
-  open(unit=12,file='BispectrumCovariance_local_Pol_3.0.dat', status = 'replace')
+  open(unit=12,file='BispectrumCovariance_local_Pol_4.0.dat', status = 'replace')
   !want to use analytical approximation of wigner3J (slightly faster)
   AWigner = .True.
 
   !if(want_ISW_correction) then   
 
-  do j = 400, 3000, 800
+  do j = 600, 4000, 200
      TotSumCV = 0.d0
      TotSumCVISWLens = 0.d0
      TotSumCVLensCross = 0.d0
@@ -323,7 +330,7 @@ program bisvar
      TotNoise = 0.d0
      TotSumGauss_outer = 0.d0
      TotSumNGauss_outer = 0.d0
-     do i = 1, intmax !multiples of 32
+     do i = imin, intmax !multiples of 32
         l1 = ellar(i)
         !write(*,*) 'l1:', l1
         TotSumGauss = 0.d0
@@ -350,14 +357,10 @@ program bisvar
            min_l = max(abs(l1-l2),lmin) 
            max_l = min(j,l1+l2)
            do l3=min_l,max_l,2 !sum has to be even
-              !write(*,'(3I4,2E18.7)') l1,l2,l3,bispectrum(1,1,1,l2,l3),bispectrum(2,2,2,l2,l3)
               call applyInvC(bispectrum,invCll,minfields,nfields, l1,l2,l3)
               call applyInvC(bispectrum_ISWlens,invCll,minfields,nfields,l1,l2,l3)
-              !write(*,'(3I4,2E18.7)') l1,l2,l3,bispectrum(1,1,1,l2,l3),bispectrum(2,2,2,l2,l3)
            enddo
-           ! write(*,*),bispectrum_ISWlens(1,1,1,l2,l3),bispectrum_ISWlens(1,1,1,l3,l2)
 
-           ! bispectrum_ISWlens(1,l2,:) = bis_ISWlens(1,:)*.5 ! .5 for account for 2 in prefactor
 
            if (AWigner) then
               min_l = max(abs(l1-l2),lmin)  
@@ -377,8 +380,7 @@ program bisvar
            if (nfields .gt. 1) then
               call GetThreeJs(atj(abs(l2-l1)),l1,l2,0,-2)
               a3joC(l2,1:2*j) = atj(1:2*j)
-              !write(*,*)  a3joC(l2,1:2*j)
-              !a3joC(l2,1:2*j) = a3j(l2,1:2*j)
+
            endif
         enddo
         do l2 = lmin, j
@@ -390,11 +392,6 @@ program bisvar
            do l3 = min_l,max_l,2
               call permuteBis(bispectrum_ISWlens,minfields,nfields,l2,l3)
               call permuteBis(bispectrum,minfields,nfields,l2,l3)
-              ! bispectrum(1,l3,l2) = bispectrum(1,l2,l3)
-              ! bispectrum_ISWlens(1,l3,l2) = bispectrum_ISWlens(1,l2,l3)
-              !bispectrum(1,l3,l2) = floc(l1,l2,l3)
-              !bispectrum(1,l2,l3) = floc(l1,l2,l3)
-              !write(*,*) bispectrum(1,l2,l3),bispectrum(1,l3,l2),floc(l1,l2,l3),floc(l1,l3,l2)
            enddo
         enddo
         !do j = 1, intmax !l2 loop
@@ -415,12 +412,7 @@ program bisvar
            !checking
            !call GetThreeJs(atj2(abs(l2-l1)),l1,l2,0,0)
            do l3=min_l,max_l, 2 !sum has to be even
-              ! if (bispectrum_ISWlens(1,l2,l3) .eq. 0) then
-              !    write(*,*) l2,l3,bispectrum_ISWlens(1,l2,l3)
-              ! endif
-              ! if (bispectrum(1,l2,l3) .eq. 0) then
-              !    write(*,*) l2,l3,bispectrum(1,l2,l3)
-              ! endif
+
               l1b=l1 !l1 = l1'
 
               do l2b = lmin, j
@@ -433,21 +425,9 @@ program bisvar
                  max_lb = min(j,l1b+l2b)
 
                  do l3b=min_lb,max_lb, 2 !min_lb,max_lb, 2 !sum has to be even
-                    !4 possible permutations of the second index
 
-                    ! DB = Cll(1,l2)*Cll(1,l2b)*4.0*a3j(l2,l3)*a3j(l2b,l3b)*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)/Cll(1,l3)/Cll(1,l3b)/Cll(1,l2)/Cll(1,l2b)                  
-                    ! fnlISW = bispectrum_ISWlens(1,l2,l3)
-                    ! fnlISWb = bispectrum_ISWlens(1,l2b,l3b)
-                    ! fnl = bispectrum(1,l2,l3)
-                    ! fnlb = bispectrum(1,l2b,l3b)
-                    ! tempfac = a3j(l2,l3)*prefactor(l1,l2,l3)*a3j(l2b,l3b)*prefactor(l1b,l2b,l3b)
-
-                    ! sigsq = tempfac*( alpha**2*fnl*fnlb &
-                    !      + alpha*beta*fnl*fnlISWb + alpha*beta*fnlb*fnlISW + beta**2*fnlISW*fnlISWb)
-                    ! !delta (N)^2 . nine possible permutations of the first index
-                    ! DSNonGauss = 9.d0*pClpp(1,l1)/Cll(1,l1)*sigsq*DB/36.!*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
                     tempfacFcM(:,:) = 0
-                    tempfac = 4.0*FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*9.d0*pClpp(1,l1)/36.
+                    tempfac = FcM(l3,l1,l2)*FcM(l3b,l1,l2b)/(2*l1+1.d0)*pClpp(1,l1)
                     tempfacFcM(1,1) = a3j(l2,l3)*a3j(l2b,l3b)*tempfac
                     if (nfields .gt. 1) then
                        tempfacFcM(2,1) = a3joC(l2,l3)*a3j(l2b,l3b)*tempfac
@@ -471,17 +451,14 @@ program bisvar
                                       fnl = bispectrum(m1,p1,q1,l2,l3)
                                       fnlb = bispectrum(m2,p2,q2,l2b,l3b)
 
-                                      write(*,*) bispectrum(2,2,2,l2,l3),bispectrum(1,1,1,l2,l3)
                                       sigsq = tempfac*( alpha**2*fnl*fnlb &
                                            + alpha*beta*fnl*fnlISWb + alpha*beta*fnlb*fnlISW + beta**2*fnlISW*fnlISWb)
-                                      !write(*,*) sigsq
-                                      !endif
+
                                       if ((l1.eq.l1b) .and. (l2 .eq.l2b) .and. (l3 .eq.l3b)) then
-                                         DSNGauss = sigsq*Cllm(m1,m2,l1)*Cllm(p1,p2,l2)*Cllm(q1,q2,l3)
+                                         DSNGauss = sigsq*Cllm(m1,m2,l1)*Cllm(p1,p2,l2)*Cllm(q1,q2,l3)*dellar(i)
                                       endif
-                                      !delta (N)^2 . nine possible permutations of the first index
-                                      DSNonGauss = DSNonGauss+ sigsq*DB!*dellar(j)*dellar(k)/36.!/tr(l1,l2,l3)/tr(l1b,l2b,l3b)
-                                      !l3b = l3                                  
+                                      !delta (N)^2 
+                                      DSNonGauss = DSNonGauss+ sigsq*DB*dellar(i)
                                    enddo
                                 enddo
                              enddo
@@ -521,6 +498,8 @@ program bisvar
      enddo !l1
      write(12,'(I4,5E18.7)') j, sqrt(SumGauss/SumNGauss), (SumNGauss-SumGauss)/TotSumCV, TotSumNGauss_outer/alpha,TotSumGauss_outer/alpha, alpha/(TotSumNGauss_outer-TotSumGauss_outer+alpha)
      write(*,'(I4,5E18.7)') j, sqrt(SumGauss/SumNGauss), (SumNGauss-SumGauss)/TotSumCV, TotSumNGauss_outer/alpha,TotSumGauss_outer/alpha, alpha/(TotSumNGauss_outer-TotSumGauss_outer+alpha)
+     write(*,'(A12,X,I4,X,A19,X,F11.3,X, A10,X,F11.4,A1)') 'For lmax = ',  lmax, 'the error on fnl = ', sqrt(alpha**2/SumGauss), 'agreement?:', 100*sqrt(TotSumCV/SumGauss)-100,'%'
+
   enddo !lmax loop
   !write(*,'(I4,4E17.8)') lmax, (SumNGauss-SumGauss)/TotSumCV
   !write(*,'(I4,4E17.8)') ellar(intmax), SumGauss, SumNGauss, sqrt(SumGauss/SumNGauss)
@@ -606,8 +585,8 @@ contains
     integer, intent(in):: nfields,minfields
     integer, intent(in) :: l1,l2,l3
     integer :: m1,m2,p1,p2,q1,q2
-    real(dl) :: tmpBis(minfields:nfields,minfields:nfields,minfields:nfields)
-    tmpBis(:,:,:) = 0
+    real(dl) :: tmpBis(nfields,nfields,nfields)
+    tmpBis(:,:,:) = 0.d0
     do m1 = minfields,nfields
        do m2 = minfields,nfields
           do p1 = minfields,nfields
